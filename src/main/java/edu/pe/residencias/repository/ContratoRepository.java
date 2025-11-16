@@ -7,4 +7,6 @@ import edu.pe.residencias.model.entity.Contrato;
 
 @Repository
 public interface ContratoRepository extends JpaRepository<Contrato, Long> {
+	// count contracts for a given student (usuario) id
+	long countBySolicitudEstudianteId(Long estudianteId);
 }

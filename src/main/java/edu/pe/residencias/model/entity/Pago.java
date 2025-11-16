@@ -2,6 +2,10 @@ package edu.pe.residencias.model.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.OneToMany;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,4 +50,7 @@ public class Pago {
 
     @Column(name = "estado")
     private String estado; // 'pendiente', 'completado', 'fallido'
+
+    @OneToMany(mappedBy = "pago", cascade = CascadeType.ALL)
+    private List<Abono> abonos;
 }

@@ -21,6 +21,8 @@ public interface UsuarioService {
 
     Optional<Usuario> findByUuid(String uuid);
 
+    edu.pe.residencias.model.dto.UserProfileDTO getProfileByUuid(String uuid);
+
     // password helpers
     String encodePassword(String rawPassword);
     boolean matchesPassword(String rawPassword, String encodedPassword);

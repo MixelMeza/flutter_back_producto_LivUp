@@ -7,4 +7,5 @@ import edu.pe.residencias.model.entity.Acceso;
 
 @Repository
 public interface AccesoRepository extends JpaRepository<Acceso, Long> {
+	java.util.Optional<Acceso> findFirstByUsuarioIdOrderByUltimaSesionDesc(Long usuarioId);
 }

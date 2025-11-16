@@ -18,6 +18,10 @@ import edu.pe.residencias.repository.PersonaRepository;
 import edu.pe.residencias.repository.RolRepository;
 import edu.pe.residencias.repository.UsuarioRepository;
 import edu.pe.residencias.service.UsuarioService;
+import edu.pe.residencias.model.dto.UserProfileDTO;
+import edu.pe.residencias.repository.AbonoRepository;
+import edu.pe.residencias.repository.ContratoRepository;
+import edu.pe.residencias.repository.AccesoRepository;
 
 @Service
 public class UsuarioServiceImpl implements UsuarioService {
@@ -33,6 +37,15 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private ContratoRepository contratoRepository;
+
+    @Autowired
+    private AbonoRepository abonoRepository;
+
+    @Autowired
+    private AccesoRepository accesoRepository;
 
     @Override
     public Usuario create(Usuario usuario) {
@@ -136,6 +149,46 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public Optional<Usuario> findByUuid(String uuid) {
         return repository.findByUuid(uuid);
+    }
+
+    @Override
+    public UserProfileDTO getProfileByUuid(String uuid) {
+        Optional<Usuario> opt = repository.findByUuid(uuid);
+        if (!opt.isPresent()) return null;
+        Usuario u = opt.get();
+        Persona p = u.getPersona();
+
+        UserProfileDTO dto = new UserProfileDTO();
+        dto.setId(u.getId());
+        dto.setUuid(u.getUuid());
+        dto.setUsername(u.getUsername());
+        String display = "";
+        if (p != null) display = (p.getNombre() == null ? "" : p.getNombre()) + " " + (p.getApellido() == null ? "" : p.getApellido());
+        dto.setDisplayName(display.trim());
+        dto.setRol(u.getRol() != null ? u.getRol().getNombre() : null);
+        dto.setRol_id(u.getRol() != null ? u.getRol().getId() : null);
+        dto.setEmail(p != null ? p.getEmail() : u.getUsername());
+        dto.setEmail_verificado(u.getEmailVerificado());
+        dto.setFoto_url(p != null ? p.getFotoUrl() : null);
+        dto.setTelefono(p != null ? p.getTelefono() : null);
+        dto.setUbicacion(null);
+        dto.setDireccion(p != null ? p.getDireccion() : null);
+        dto.setFecha_nacimiento(p != null && p.getFechaNacimiento() != null ? p.getFechaNacimiento().toString() : null);
+        dto.setCreated_at(u.getCreatedAt() != null ? u.getCreatedAt().toString() : (p != null && p.getCreatedAt() != null ? p.getCreatedAt().toString() : null));
+        dto.setEstado(u.getEstado());
+        dto.setPermisos(java.util.Collections.emptyList());
+
+        // stats
+        long nContratos = contratoRepository.countBySolicitudEstudianteId(u.getId());
+        long nAbonos = abonoRepository.countByPagoContratoSolicitudEstudianteId(u.getId());
+        java.math.BigDecimal saldo = abonoRepository.sumMontoByEstudianteId(u.getId());
+        dto.setN_contratos((int) nContratos);
+        dto.setN_abonos((int) nAbonos);
+        dto.setSaldo_abonado(saldo != null ? saldo : java.math.BigDecimal.ZERO);
+
+        accesoRepository.findFirstByUsuarioIdOrderByUltimaSesionDesc(u.getId()).ifPresent(a -> dto.setUltima_actividad(a.getUltimaSesion() != null ? a.getUltimaSesion().toString() : null));
+
+        return dto;
     }
 
     @Override

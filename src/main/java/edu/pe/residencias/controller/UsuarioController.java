@@ -19,10 +19,15 @@ import jakarta.validation.Valid;
 import edu.pe.residencias.model.dto.UsuarioCreateDTO;
 import edu.pe.residencias.model.entity.Usuario;
 import edu.pe.residencias.service.UsuarioService;
+import edu.pe.residencias.model.dto.UserProfileDTO;
 import edu.pe.residencias.security.JwtUtil;
 import edu.pe.residencias.controller.auth.ErrorResponse;
 import io.jsonwebtoken.Claims;
 import org.springframework.web.bind.annotation.RequestHeader;
+import edu.pe.residencias.model.dto.PersonaUpdateDTO;
+import edu.pe.residencias.repository.PersonaRepository;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -33,6 +38,9 @@ public class UsuarioController {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private PersonaRepository personaRepository;
 
     @GetMapping
     public ResponseEntity<List<Usuario>> readAll() {
@@ -73,6 +81,37 @@ public class UsuarioController {
                 return new ResponseEntity<>(new ErrorResponse("No token provided"), HttpStatus.UNAUTHORIZED);
             }
             String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            // Log request for debugging (mask token tail)
+            String tokenShort = token.length() > 20 ? token.substring(0, 10) + "..." + token.substring(token.length()-10) : token;
+            System.out.println("[UsuarioController.me] token=" + tokenShort);
+            Claims claims = jwtUtil.parseToken(token);
+            String uuid = claims.get("uid", String.class);
+            if (uuid == null) {
+                return new ResponseEntity<>(new ErrorResponse("Invalid token"), HttpStatus.UNAUTHORIZED);
+            }
+            UserProfileDTO profile = usuarioService.getProfileByUuid(uuid);
+            if (profile == null) {
+                return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
+            }
+            return new ResponseEntity<>(profile, HttpStatus.OK);
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            return new ResponseEntity<>(new ErrorResponse("Token expired"), HttpStatus.UNAUTHORIZED);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Failed to parse token"), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMe(@RequestHeader(value = "Authorization", required = false) String authHeader,
+                                      @RequestBody PersonaUpdateDTO updateDto) {
+        try {
+            if (authHeader == null || authHeader.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("No token provided"), HttpStatus.UNAUTHORIZED);
+            }
+            String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            String tokenShort = token.length() > 20 ? token.substring(0, 10) + "..." + token.substring(token.length()-10) : token;
+            System.out.println("[UsuarioController.updateMe] token=" + tokenShort + ", payload=" + updateDto);
             Claims claims = jwtUtil.parseToken(token);
             String uuid = claims.get("uid", String.class);
             if (uuid == null) {
@@ -83,23 +122,56 @@ public class UsuarioController {
                 return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
             }
             Usuario u = opt.get();
-            // Prepare a minimal profile map for frontend
-            java.util.Map<String, Object> profile = new java.util.HashMap<>();
-            profile.put("id", u.getId());
-            profile.put("username", u.getUsername());
-            profile.put("email", u.getPersona() == null ? null : u.getPersona().getEmail());
-            if (u.getRol() != null) {
-                profile.put("rol", u.getRol().getNombre());
-                profile.put("rol_id", u.getRol().getId());
+            var p = u.getPersona();
+            if (p == null) {
+                p = new edu.pe.residencias.model.entity.Persona();
+                p.setCreatedAt(java.time.LocalDateTime.now());
             }
-            // include uuid as well
-            profile.put("uuid", u.getUuid());
-            return new ResponseEntity<>(profile, HttpStatus.OK);
+            if (updateDto.getNombre() != null) p.setNombre(updateDto.getNombre());
+            if (updateDto.getApellido() != null) p.setApellido(updateDto.getApellido());
+            if (updateDto.getTelefono() != null) p.setTelefono(updateDto.getTelefono());
+            if (updateDto.getDireccion() != null) p.setDireccion(updateDto.getDireccion());
+            if (updateDto.getFoto_url() != null) p.setFotoUrl(updateDto.getFoto_url());
+            if (updateDto.getEmail() != null) p.setEmail(updateDto.getEmail());
+            if (updateDto.getFecha_nacimiento() != null && !updateDto.getFecha_nacimiento().isEmpty()) {
+                String raw = updateDto.getFecha_nacimiento();
+                try {
+                    if (raw.contains("T")) {
+                        p.setFechaNacimiento(java.time.LocalDateTime.parse(raw).toLocalDate());
+                    } else {
+                        p.setFechaNacimiento(LocalDate.parse(raw));
+                    }
+                } catch (DateTimeParseException ex) {
+                    try {
+                        String datePart = raw.split("T| ")[0];
+                        p.setFechaNacimiento(LocalDate.parse(datePart));
+                    } catch (Exception ex2) {
+                        return new ResponseEntity<>(new ErrorResponse("Invalid fecha_nacimiento format"), HttpStatus.BAD_REQUEST);
+                    }
+                }
+            }
+            personaRepository.save(p);
+            u.setPersona(p);
+            usuarioService.update(u);
+
+            UserProfileDTO profileDto = usuarioService.getProfileByUuid(uuid);
+            return new ResponseEntity<>(profileDto, HttpStatus.OK);
         } catch (io.jsonwebtoken.ExpiredJwtException ex) {
             return new ResponseEntity<>(new ErrorResponse("Token expired"), HttpStatus.UNAUTHORIZED);
+        } catch (org.springframework.dao.DataIntegrityViolationException dex) {
+            dex.printStackTrace();
+            // likely unique constraint violation (email, dni, etc.)
+            return new ResponseEntity<>(new ErrorResponse("Data integrity error: " + dex.getMostSpecificCause().getMessage()), HttpStatus.CONFLICT);
         } catch (Exception ex) {
-            ex.printStackTrace();
-            return new ResponseEntity<>(new ErrorResponse("Failed to parse token"), HttpStatus.INTERNAL_SERVER_ERROR);
+            // capture full stacktrace
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            ex.printStackTrace(pw);
+            String stack = sw.toString();
+            // log and return stacktrace in response for debugging (remove in production)
+            System.err.println("[UsuarioController.updateMe] Exception: " + stack);
+            ErrorResponse resp = new ErrorResponse(stack);
+            return new ResponseEntity<>(resp, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
