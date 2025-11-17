@@ -106,30 +106,29 @@ public class Residencia {
     @JsonIgnore
     private Set<ImagenResidencia> imagenesResidencia;
 
-<<<<<<< HEAD
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            Residencia that = (Residencia) o;
-            return id != null && id.equals(that.id);
-        }
+            @PrePersist
+            public void prePersist() {
+                if (this.createdAt == null) {
+                    this.createdAt = LocalDateTime.now();
+                }
+            }
 
-        @Override
-        public int hashCode() {
-            return id != null ? id.hashCode() : 0;
-        }
-=======
-    @PrePersist
-    public void prePersist() {
-        if (this.createdAt == null) {
-            this.createdAt = LocalDateTime.now();
-        }
-    }
->>>>>>> origin/master
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) return true;
+                if (o == null || getClass() != o.getClass()) return false;
+                Residencia that = (Residencia) o;
+                return id != null && id.equals(that.id);
+            }
+
+            @Override
+            public int hashCode() {
+                return id != null ? id.hashCode() : 0;
+            }
         if (o == null || getClass() != o.getClass()) return false;
         Residencia that = (Residencia) o;
         return id != null && id.equals(that.id);
