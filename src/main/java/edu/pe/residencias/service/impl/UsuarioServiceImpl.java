@@ -112,6 +112,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     }
 
     @Override
+    @Transactional
     public Usuario update(Usuario usuario) {
         return repository.save(usuario);
     }
@@ -189,6 +190,47 @@ public class UsuarioServiceImpl implements UsuarioService {
         accesoRepository.findFirstByUsuarioIdOrderByUltimaSesionDesc(u.getId()).ifPresent(a -> dto.setUltima_actividad(a.getUltimaSesion() != null ? a.getUltimaSesion().toString() : null));
 
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public UserProfileDTO updateProfileByUuid(String uuid, edu.pe.residencias.model.dto.PersonaUpdateDTO dto) {
+        Optional<Usuario> opt = repository.findByUuid(uuid);
+        if (opt.isEmpty()) return null;
+        Usuario u = opt.get();
+        Persona p = u.getPersona();
+        if (p == null) {
+            p = new Persona();
+            p.setCreatedAt(java.time.LocalDateTime.now());
+        }
+        if (dto.getNombre() != null) p.setNombre(dto.getNombre());
+        if (dto.getApellido() != null) p.setApellido(dto.getApellido());
+        if (dto.getTelefono() != null) p.setTelefono(dto.getTelefono());
+        if (dto.getDireccion() != null) p.setDireccion(dto.getDireccion());
+        if (dto.getFoto_url() != null) p.setFotoUrl(dto.getFoto_url());
+        if (dto.getEmail() != null) p.setEmail(dto.getEmail());
+        if (dto.getFecha_nacimiento() != null && !dto.getFecha_nacimiento().isEmpty()) {
+            String raw = dto.getFecha_nacimiento();
+            try {
+                if (raw.contains("T")) {
+                    p.setFechaNacimiento(java.time.LocalDateTime.parse(raw).toLocalDate());
+                } else {
+                    p.setFechaNacimiento(java.time.LocalDate.parse(raw));
+                }
+            } catch (java.time.format.DateTimeParseException ex) {
+                try {
+                    String datePart = raw.split("T| ")[0];
+                    p.setFechaNacimiento(java.time.LocalDate.parse(datePart));
+                } catch (Exception ex2) {
+                    throw ex;
+                }
+            }
+        }
+        personaRepository.save(p);
+        u.setPersona(p);
+        repository.save(u);
+
+        return getProfileByUuid(uuid);
     }
 
     @Override

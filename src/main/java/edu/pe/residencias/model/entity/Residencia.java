@@ -1,6 +1,7 @@
 package edu.pe.residencias.model.entity;
 
 import java.time.LocalDateTime;
+import jakarta.persistence.PrePersist;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -17,7 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -27,13 +28,14 @@ import lombok.Setter;
 @Setter
 @Getter
 @Entity
-@Data
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "residencias")
 public class Residencia {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
+    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne
@@ -97,4 +99,11 @@ public class Residencia {
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "residencia")
     @JsonIgnore
     private Set<ImagenResidencia> imagenesResidencia;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = LocalDateTime.now();
+        }
+    }
 }
