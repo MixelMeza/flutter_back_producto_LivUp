@@ -18,6 +18,9 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
 
     @Override
     public SolicitudAlojamiento create(SolicitudAlojamiento solicitudAlojamiento) {
+        if (solicitudAlojamiento.getEstado() == null || solicitudAlojamiento.getEstado().isEmpty()) {
+            solicitudAlojamiento.setEstado("pendiente");
+        }
         return repository.save(solicitudAlojamiento);
     }
 

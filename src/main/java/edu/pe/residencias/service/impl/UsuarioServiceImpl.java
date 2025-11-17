@@ -95,7 +95,11 @@ public class UsuarioServiceImpl implements UsuarioService {
         u.setUsername(dto.getUsername());
         u.setEmailVerificado(dto.getEmail_verificado());
         u.setPassword(passwordEncoder.encode(dto.getPassword()));
-        u.setEstado(dto.getEstado());
+        if (dto.getEstado() == null || dto.getEstado().isEmpty()) {
+            u.setEstado("activo");
+        } else {
+            u.setEstado(dto.getEstado());
+        }
         u.setCreatedAt(LocalDateTime.now());
 
         Rol rol = null;

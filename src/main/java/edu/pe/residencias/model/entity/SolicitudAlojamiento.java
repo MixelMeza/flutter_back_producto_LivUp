@@ -30,6 +30,12 @@ import lombok.Setter;
 @Data
 @Table(name = "solicitudes_alojamiento")
 public class SolicitudAlojamiento {
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.fechaSolicitud == null) {
+                this.fechaSolicitud = java.time.LocalDate.now();
+            }
+        }
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,8 +57,14 @@ public class SolicitudAlojamiento {
     @Column(name = "fecha_solicitud")
     private LocalDate fechaSolicitud;
 
+    @Column(name = "duracion_meses")
+    private Integer duracionMeses;
+
+    @Column(name = "fijo")
+    private Boolean fijo;
+
     @Column(name = "estado")
-    private String estado; // 'pendiente', 'aceptada', 'rechazada'
+    private String estado; // 'pendiente', 'aceptada', 'rechazada', 'ocupada'
 
     @Column(name = "comentarios", columnDefinition = "TEXT")
     private String comentarios;
@@ -60,4 +72,17 @@ public class SolicitudAlojamiento {
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "solicitud")
     @JsonIgnore
     private Set<Contrato> contratos;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            SolicitudAlojamiento that = (SolicitudAlojamiento) o;
+            return id != null && id.equals(that.id);
+        }
+
+        @Override
+        public int hashCode() {
+            return id != null ? id.hashCode() : 0;
+        }
 }

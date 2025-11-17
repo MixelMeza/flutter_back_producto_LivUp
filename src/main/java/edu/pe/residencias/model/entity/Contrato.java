@@ -32,6 +32,12 @@ import lombok.Setter;
 @Data
 @Table(name = "contratos")
 public class Contrato {
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.createdAt == null) {
+                this.createdAt = java.time.LocalDateTime.now();
+            }
+        }
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -57,8 +63,14 @@ public class Contrato {
     @Column(name = "condiciones", columnDefinition = "TEXT")
     private String condiciones;
 
+    @Column(name = "tipo_contrato")
+    private String tipoContrato;
+
+    @Column(name = "fecha_proxima_renovacion")
+    private LocalDate fechaProximaRenovacion;
+
     @Column(name = "estado")
-    private String estado; // 'vigente', 'finalizado', 'cancelado'
+    private String estado; // 'vigente', 'finalizado', 'cancelado', 'renovar'
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

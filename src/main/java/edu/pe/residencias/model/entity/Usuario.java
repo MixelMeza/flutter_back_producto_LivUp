@@ -46,9 +46,12 @@ public class Usuario {
     private String uuid;
 
     @PrePersist
-    public void ensureUuid() {
+    public void prePersist() {
         if (this.uuid == null || this.uuid.isEmpty()) {
             this.uuid = UUID.randomUUID().toString();
+        }
+        if (this.createdAt == null) {
+            this.createdAt = java.time.LocalDateTime.now();
         }
     }
 

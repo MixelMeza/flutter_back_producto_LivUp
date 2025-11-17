@@ -18,6 +18,9 @@ public class ResidenciaServiceImpl implements ResidenciaService {
 
     @Override
     public Residencia create(Residencia residencia) {
+        if (residencia.getEstado() == null || residencia.getEstado().isEmpty()) {
+            residencia.setEstado("activo");
+        }
         return repository.save(residencia);
     }
 

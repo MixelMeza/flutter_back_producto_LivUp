@@ -45,6 +45,7 @@ public class ContratoController {
             Contrato c = contratoService.create(contrato);
             return new ResponseEntity<>(c, HttpStatus.CREATED);
         } catch (Exception e) {
+            e.printStackTrace(); // Mostrar el error en la consola
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

@@ -24,6 +24,15 @@ import lombok.Setter;
 @Data
 @Table(name = "imagen_residencia")
 public class ImagenResidencia {
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.estado == null || this.estado.isEmpty()) {
+                this.estado = "activo";
+            }
+            if (this.createdAt == null) {
+                this.createdAt = java.time.LocalDateTime.now();
+            }
+        }
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
