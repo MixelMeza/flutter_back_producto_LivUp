@@ -23,6 +23,8 @@ public interface UsuarioService {
 
     edu.pe.residencias.model.dto.UserProfileDTO getProfileByUuid(String uuid);
 
+    edu.pe.residencias.model.dto.UserProfileDTO updateProfileByUuid(String uuid, edu.pe.residencias.model.dto.PersonaUpdateDTO dto);
+
     // password helpers
     String encodePassword(String rawPassword);
     boolean matchesPassword(String rawPassword, String encodedPassword);

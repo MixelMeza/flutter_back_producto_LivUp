@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import edu.pe.residencias.model.entity.Persona;
@@ -14,6 +15,7 @@ import edu.pe.residencias.repository.RolRepository;
 import edu.pe.residencias.repository.UsuarioRepository;
 
 @Component
+@Profile("!prod")
 public class DataInitializer implements CommandLineRunner {
 
     private final RolRepository rolRepository;

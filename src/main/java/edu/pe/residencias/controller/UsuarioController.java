@@ -25,9 +25,7 @@ import edu.pe.residencias.controller.auth.ErrorResponse;
 import io.jsonwebtoken.Claims;
 import org.springframework.web.bind.annotation.RequestHeader;
 import edu.pe.residencias.model.dto.PersonaUpdateDTO;
-import edu.pe.residencias.repository.PersonaRepository;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
+// imports for date parsing moved to service
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -39,8 +37,7 @@ public class UsuarioController {
     @Autowired
     private JwtUtil jwtUtil;
 
-    @Autowired
-    private PersonaRepository personaRepository;
+    // personaRepository is handled inside the service now
 
     @GetMapping
     public ResponseEntity<List<Usuario>> readAll() {
@@ -117,44 +114,8 @@ public class UsuarioController {
             if (uuid == null) {
                 return new ResponseEntity<>(new ErrorResponse("Invalid token"), HttpStatus.UNAUTHORIZED);
             }
-            var opt = usuarioService.findByUuid(uuid);
-            if (opt.isEmpty()) {
-                return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
-            }
-            Usuario u = opt.get();
-            var p = u.getPersona();
-            if (p == null) {
-                p = new edu.pe.residencias.model.entity.Persona();
-                p.setCreatedAt(java.time.LocalDateTime.now());
-            }
-            if (updateDto.getNombre() != null) p.setNombre(updateDto.getNombre());
-            if (updateDto.getApellido() != null) p.setApellido(updateDto.getApellido());
-            if (updateDto.getTelefono() != null) p.setTelefono(updateDto.getTelefono());
-            if (updateDto.getDireccion() != null) p.setDireccion(updateDto.getDireccion());
-            if (updateDto.getFoto_url() != null) p.setFotoUrl(updateDto.getFoto_url());
-            if (updateDto.getEmail() != null) p.setEmail(updateDto.getEmail());
-            if (updateDto.getFecha_nacimiento() != null && !updateDto.getFecha_nacimiento().isEmpty()) {
-                String raw = updateDto.getFecha_nacimiento();
-                try {
-                    if (raw.contains("T")) {
-                        p.setFechaNacimiento(java.time.LocalDateTime.parse(raw).toLocalDate());
-                    } else {
-                        p.setFechaNacimiento(LocalDate.parse(raw));
-                    }
-                } catch (DateTimeParseException ex) {
-                    try {
-                        String datePart = raw.split("T| ")[0];
-                        p.setFechaNacimiento(LocalDate.parse(datePart));
-                    } catch (Exception ex2) {
-                        return new ResponseEntity<>(new ErrorResponse("Invalid fecha_nacimiento format"), HttpStatus.BAD_REQUEST);
-                    }
-                }
-            }
-            personaRepository.save(p);
-            u.setPersona(p);
-            usuarioService.update(u);
-
-            UserProfileDTO profileDto = usuarioService.getProfileByUuid(uuid);
+            UserProfileDTO profileDto = usuarioService.updateProfileByUuid(uuid, updateDto);
+            if (profileDto == null) return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
             return new ResponseEntity<>(profileDto, HttpStatus.OK);
         } catch (io.jsonwebtoken.ExpiredJwtException ex) {
             return new ResponseEntity<>(new ErrorResponse("Token expired"), HttpStatus.UNAUTHORIZED);
