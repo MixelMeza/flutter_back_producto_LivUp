@@ -69,8 +69,11 @@ public class Residencia {
     @Column(name = "email_contacto")
     private String emailContacto;
 
+    @Column(name = "servicios", columnDefinition = "TEXT")
+    private String servicios;
+
     @Column(name = "estado")
-    private String estado;
+    private String estado = "Activo";
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

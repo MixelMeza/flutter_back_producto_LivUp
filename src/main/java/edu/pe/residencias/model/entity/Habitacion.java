@@ -65,6 +65,12 @@ public class Habitacion {
     @Column(name = "capacidad")
     private Integer capacidad;
 
+    @Column(name = "descripcion", columnDefinition = "TEXT")
+    private String descripcion;
+
+    @Column(name = "permitir_mascotas")
+    private Boolean permitir_mascotas;
+
     @Column(name = "agua")
     private Boolean agua;
 
