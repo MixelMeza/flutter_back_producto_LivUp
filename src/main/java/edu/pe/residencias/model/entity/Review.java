@@ -46,4 +46,11 @@ public class Review {
 
     @Column(name = "fecha_review")
     private LocalDateTime fechaReview;
+
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.fechaReview == null) {
+                this.fechaReview = java.time.LocalDateTime.now();
+            }
+        }
 }

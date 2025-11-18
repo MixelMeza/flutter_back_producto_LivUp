@@ -52,5 +52,13 @@ public class Pago {
     private String estado; // 'pendiente', 'completado', 'fallido'
 
     @OneToMany(mappedBy = "pago", cascade = CascadeType.ALL)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private List<Abono> abonos;
+
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.fechaPago == null) {
+                this.fechaPago = java.time.LocalDateTime.now();
+            }
+        }
 }

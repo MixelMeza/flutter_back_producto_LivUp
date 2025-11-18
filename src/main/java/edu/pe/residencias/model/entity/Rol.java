@@ -45,4 +45,7 @@ public class Rol {
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "rol")
     @JsonIgnore
     private Set<Usuario> usuarios;
+        // Métodos setter explícitos para DataInitializer
+        public void setNombre(String nombre) { this.nombre = nombre; }
+        public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
 }

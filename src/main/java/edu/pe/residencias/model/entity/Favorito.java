@@ -39,5 +39,12 @@ public class Favorito {
     private Habitacion habitacion;
 
     @Column(name = "fecha", nullable = false)
-    private Instant fecha = Instant.now();
+        private Instant fecha;
+
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.fecha == null) {
+                this.fecha = Instant.now();
+            }
+        }
 }

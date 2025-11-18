@@ -72,7 +72,7 @@ public class VistaRecienteServiceImpl implements VistaRecienteService {
     @Override
     public List<VistaReciente> getRecentForUser(Long usuarioId, int limit) {
         if (usuarioId == null) return java.util.Collections.emptyList();
-        return vistaRepository.findRecentByUsuarioId(usuarioId, PageRequest.of(0, limit));
+        return vistaRepository.findRecentByUsuarioIdWithJoin(usuarioId, PageRequest.of(0, limit));
     }
 
     @Override

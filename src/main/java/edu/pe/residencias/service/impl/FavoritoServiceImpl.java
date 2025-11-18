@@ -63,4 +63,23 @@ public class FavoritoServiceImpl implements FavoritoService {
         if (habitacionId == null) return 0L;
         return favoritoRepository.countByHabitacionId(habitacionId);
     }
+
+    @Override
+    public java.util.List<Favorito> findAll() {
+        return favoritoRepository.findAllWithUsuarioAndHabitacion();
+    }
+        @Override
+        public Favorito save(Favorito favorito) {
+            return favoritoRepository.save(favorito);
+        }
+
+        @Override
+        public Favorito findById(Long id) {
+            return favoritoRepository.findById(id).orElse(null);
+        }
+
+        @Override
+        public void deleteById(Long id) {
+            favoritoRepository.deleteById(id);
+        }
 }

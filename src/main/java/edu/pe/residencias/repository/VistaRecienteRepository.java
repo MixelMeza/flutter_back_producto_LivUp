@@ -14,6 +14,9 @@ public interface VistaRecienteRepository extends JpaRepository<VistaReciente, Lo
     Optional<VistaReciente> findByUsuarioIdAndHabitacionId(Long usuarioId, Long habitacionId);
     Optional<VistaReciente> findBySessionUuidAndHabitacionId(String sessionUuid, Long habitacionId);
 
+    @Query("SELECT v FROM VistaReciente v JOIN FETCH v.usuario JOIN FETCH v.habitacion WHERE v.usuario.id = :userId ORDER BY v.vistoEn DESC")
+    List<VistaReciente> findRecentByUsuarioIdWithJoin(@Param("userId") Long userId, Pageable pageable);
+
     @Query("SELECT v FROM VistaReciente v WHERE v.usuario.id = :userId ORDER BY v.vistoEn DESC")
     List<VistaReciente> findRecentByUsuarioId(@Param("userId") Long userId, Pageable pageable);
 

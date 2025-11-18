@@ -40,4 +40,11 @@ public class Abono {
 
     @Column(name = "metodo_pago")
     private String metodoPago;
+
+        @jakarta.persistence.PrePersist
+        public void prePersist() {
+            if (this.fecha == null) {
+                this.fecha = java.time.LocalDateTime.now();
+            }
+        }
 }

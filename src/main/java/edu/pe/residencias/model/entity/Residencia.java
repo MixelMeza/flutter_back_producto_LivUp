@@ -1,11 +1,8 @@
 package edu.pe.residencias.model.entity;
 
 import java.time.LocalDateTime;
-import jakarta.persistence.PrePersist;
 import java.util.Set;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
-
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -31,12 +28,6 @@ import lombok.Setter;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "residencias")
 public class Residencia {
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.createdAt == null) {
-                this.createdAt = java.time.LocalDateTime.now();
-            }
-        }
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -102,33 +93,19 @@ public class Residencia {
     @JsonIgnore
     private Set<Review> reviews;
 
-    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "residencia")
+    @OneToMany(fetch = FetchType.LAZY, mappedBy = "residencia")
     @JsonIgnore
     private Set<ImagenResidencia> imagenesResidencia;
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = java.time.LocalDateTime.now();
+        }
+    }
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            @PrePersist
-            public void prePersist() {
-                if (this.createdAt == null) {
-                    this.createdAt = LocalDateTime.now();
-                }
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) return true;
-                if (o == null || getClass() != o.getClass()) return false;
-                Residencia that = (Residencia) o;
-                return id != null && id.equals(that.id);
-            }
-
-            @Override
-            public int hashCode() {
-                return id != null ? id.hashCode() : 0;
-            }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Residencia that = (Residencia) o;
         return id != null && id.equals(that.id);
