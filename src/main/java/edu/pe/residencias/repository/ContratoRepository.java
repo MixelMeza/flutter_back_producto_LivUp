@@ -1,8 +1,10 @@
+
 package edu.pe.residencias.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import edu.pe.residencias.model.entity.Contrato;
@@ -19,4 +21,8 @@ public interface ContratoRepository extends JpaRepository<Contrato, Long> {
 	// Find vigente contract for a given inquilino (usuario) id
 	@org.springframework.data.jpa.repository.Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) = 'vigente'")
 	Optional<Contrato> findContratoVigenteByUsuarioId(@org.springframework.data.repository.query.Param("usuarioId") Long usuarioId);
+
+	// Find all contracts for a given inquilino (usuario) id except those with estado 'vigente'
+	@org.springframework.data.jpa.repository.Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) <> 'vigente'")
+	List<Contrato> findHistorialContratosByUsuarioId(@org.springframework.data.repository.query.Param("usuarioId") Long usuarioId);
 }

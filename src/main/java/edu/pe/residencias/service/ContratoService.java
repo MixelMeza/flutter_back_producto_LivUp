@@ -13,4 +13,6 @@ public interface ContratoService {
     List<Contrato> readAll();
 
     Optional<Contrato> getContratoVigenteByUsuarioId(Long usuarioId);
+
+    List<Contrato> getHistorialContratosByUsuarioId(Long usuarioId);
 }

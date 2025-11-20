@@ -22,6 +22,16 @@ import edu.pe.residencias.service.ContratoService;
 @RestController
 @RequestMapping("/api/contratos")
 public class ContratoController {
+        // Endpoint para obtener el historial de contratos de un inquilino (excepto vigente)
+        @GetMapping("/historial/usuario/{usuarioId}")
+        public ResponseEntity<?> getHistorialContratosByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
+            List<Contrato> historial = contratoService.getHistorialContratosByUsuarioId(usuarioId);
+            if (historial.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No se encontraron contratos previos para este usuario");
+            }
+            return ResponseEntity.ok(historial);
+        }
     
     @Autowired
     private ContratoService contratoService;
