@@ -1,5 +1,7 @@
 package edu.pe.residencias.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import org.springframework.stereotype.Repository;
@@ -19,4 +21,10 @@ public interface ResidenciaRepository extends JpaRepository<Residencia, Long> {
 	// Fetch a single residencia with its imagenes initialized
 	@Query("select r from Residencia r left join fetch r.imagenesResidencia i where r.id = :id")
 	java.util.Optional<Residencia> findByIdWithImagenes(@Param("id") Long id);
+
+	// Simple paginated search by nombre or descripcion (case-insensitive)
+	Page<Residencia> findByNombreContainingIgnoreCaseOrDescripcionContainingIgnoreCase(String nombre, String descripcion, Pageable pageable);
+
+	// Paginated list of all residencias
+	Page<Residencia> findAll(Pageable pageable);
 }
