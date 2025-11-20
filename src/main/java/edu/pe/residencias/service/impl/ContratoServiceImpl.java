@@ -68,4 +68,9 @@ public class ContratoServiceImpl implements ContratoService {
     public List<Contrato> readAll() {
         return repository.findAll();
     }
+
+    @Override
+    public Optional<Contrato> getContratoVigenteByUsuarioId(Long usuarioId) {
+        return repository.findContratoVigenteByUsuarioId(usuarioId);
+    }
 }

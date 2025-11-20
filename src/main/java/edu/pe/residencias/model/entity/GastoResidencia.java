@@ -3,6 +3,8 @@ package edu.pe.residencias.model.entity;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import jakarta.persistence.PrePersist;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -46,6 +48,13 @@ public class GastoResidencia {
 
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
+
+    @PrePersist
+    public void prePersist() {
+        if (fechaGasto == null) {
+            fechaGasto = LocalDate.now();
+        }
+    }
 
         @Override
         public boolean equals(Object o) {

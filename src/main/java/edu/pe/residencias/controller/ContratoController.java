@@ -80,4 +80,16 @@ public class ContratoController {
             return new ResponseEntity<>(updatedContrato, HttpStatus.OK);
         }
     }
+
+    // Endpoint para obtener el contrato vigente de un inquilino por su id
+    @GetMapping("/vigente/usuario/{usuarioId}")
+    public ResponseEntity<?> getContratoVigenteByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
+        Optional<Contrato> contrato = contratoService.getContratoVigenteByUsuarioId(usuarioId);
+        if (contrato.isPresent()) {
+            return new ResponseEntity<>(contrato.get(), HttpStatus.OK);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body("No cuenta con contrato vigente");
+        }
+    }
 }

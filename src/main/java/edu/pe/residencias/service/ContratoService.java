@@ -11,4 +11,6 @@ public interface ContratoService {
     void delete(Long id);
     Optional<Contrato> read(Long id);
     List<Contrato> readAll();
+
+    Optional<Contrato> getContratoVigenteByUsuarioId(Long usuarioId);
 }
