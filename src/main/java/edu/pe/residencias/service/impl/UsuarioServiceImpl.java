@@ -33,6 +33,9 @@ public class UsuarioServiceImpl implements UsuarioService {
     private PersonaRepository personaRepository;
 
     @Autowired
+    private edu.pe.residencias.service.ResidenciaService residenciaService;
+
+    @Autowired
     private RolRepository rolRepository;
 
     @Autowired
@@ -123,6 +126,21 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     public void delete(java.lang.Long id) {
+        // Clean residencias owned by this usuario before deleting user record
+        try {
+            var opt = repository.findById(id);
+            if (opt.isPresent()) {
+                Usuario u = opt.get();
+                if (u.getResidencias() != null) {
+                    for (var r : u.getResidencias()) {
+                        try { residenciaService.delete(r.getId()); } catch (Exception ex) { }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // ignore and proceed to delete
+        }
+
         repository.deleteById(id);
     }
 
