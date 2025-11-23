@@ -50,6 +50,15 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Autowired
     private AccesoRepository accesoRepository;
 
+    @Autowired
+    private edu.pe.residencias.repository.VerificationTokenRepository verificationTokenRepository;
+
+    @Autowired
+    private edu.pe.residencias.service.EmailService emailService;
+
+    @org.springframework.beans.factory.annotation.Value("${app.frontend.url:http://localhost:8080}")
+    private String frontendBaseUrl;
+
     @Override
     public Usuario create(Usuario usuario) {
         return repository.save(usuario);
@@ -96,7 +105,12 @@ public class UsuarioServiceImpl implements UsuarioService {
         Usuario u = new Usuario();
         u.setPersona(p);
         u.setUsername(dto.getUsername());
-        u.setEmailVerificado(dto.getEmail_verificado());
+        // Ensure emailVerificado has a sensible default (false) when not provided by the client
+        if (dto.getEmail_verificado() == null) {
+            u.setEmailVerificado(false);
+        } else {
+            u.setEmailVerificado(dto.getEmail_verificado());
+        }
         u.setPassword(passwordEncoder.encode(dto.getPassword()));
         if (dto.getEstado() == null || dto.getEstado().isEmpty()) {
             u.setEstado("activo");
@@ -115,7 +129,37 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
         u.setRol(rol);
 
-        return repository.save(u);
+        Usuario saved = repository.save(u);
+
+        // If email not verified, generate verification token and send email (best-effort)
+        try {
+            Boolean ev = saved.getEmailVerificado();
+            if (ev == null || !ev) {
+                String token = java.util.UUID.randomUUID().toString();
+                edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
+                vt.setToken(token);
+                vt.setUsuario(saved);
+                vt.setCreatedAt(LocalDateTime.now());
+                vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+                vt.setUsed(false);
+                verificationTokenRepository.save(vt);
+
+                String verifyLink = frontendBaseUrl + "/api/auth/verify?token=" + token;
+                String email = saved.getPersona() != null ? saved.getPersona().getEmail() : null;
+                if (email != null && !email.isBlank()) {
+                    String subject = "Verifica tu correo en LivUp";
+                    String body = "Bienvenido a LivUp!\n\nPara verificar tu correo haz clic en el siguiente enlace:\n" + verifyLink + "\n\nSi no fuiste tú, ignora este correo.";
+                    emailService.sendSimpleMessage(email, subject, body);
+                } else {
+                    System.out.println("[UsuarioService] No email present for user id=" + saved.getId());
+                }
+            }
+        } catch (Exception ex) {
+            System.err.println("[UsuarioService] Failed to create/send verification token: " + ex.getMessage());
+            ex.printStackTrace();
+        }
+
+        return saved;
     }
 
     @Override
@@ -125,23 +169,52 @@ public class UsuarioServiceImpl implements UsuarioService {
     }
 
     @Override
+    @Transactional
     public void delete(java.lang.Long id) {
         // Clean residencias owned by this usuario before deleting user record
         try {
             var opt = repository.findById(id);
             if (opt.isPresent()) {
                 Usuario u = opt.get();
+
+                // 1) delete residencias owned by this usuario (and their cloud assets)
                 if (u.getResidencias() != null) {
                     for (var r : u.getResidencias()) {
                         try { residenciaService.delete(r.getId()); } catch (Exception ex) { }
                     }
                 }
+
+                // 2) delete verification tokens for this usuario
+                try {
+                    verificationTokenRepository.deleteByUsuarioId(u.getId());
+                } catch (Exception ex) {
+                    System.err.println("[UsuarioService] Failed to delete verification tokens for usuarioId=" + u.getId() + ": " + ex.getMessage());
+                }
+
+                // 3) delete the usuario record
+                repository.deleteById(id);
+
+                // 4) delete associated persona (if any)
+                try {
+                    if (u.getPersona() != null && u.getPersona().getId() != null) {
+                        personaRepository.deleteById(u.getPersona().getId());
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[UsuarioService] Failed to delete persona for usuarioId=" + u.getId() + ": " + ex.getMessage());
+                }
+                return;
             }
         } catch (Exception e) {
-            // ignore and proceed to delete
+            // ignore and proceed to attempt delete by id
+            System.err.println("[UsuarioService] Exception during delete flow: " + e.getMessage());
         }
 
-        repository.deleteById(id);
+        // fallback: attempt to delete user by id even if above failed
+        try {
+            repository.deleteById(id);
+        } catch (Exception ex) {
+            System.err.println("[UsuarioService] Final attempt to delete usuario failed for id=" + id + ": " + ex.getMessage());
+        }
     }
 
     @Override

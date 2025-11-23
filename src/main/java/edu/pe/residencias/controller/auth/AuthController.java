@@ -6,9 +6,12 @@ import java.util.Optional;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,6 +33,12 @@ public class AuthController {
 
     @Autowired
     private AccesoRepository accesoRepository;
+
+    @Autowired
+    private edu.pe.residencias.repository.VerificationTokenRepository verificationTokenRepository;
+
+    @Autowired
+    private edu.pe.residencias.service.EmailService emailService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest req, HttpServletRequest request) {
@@ -81,6 +90,103 @@ public class AuthController {
             }
 
             return new ResponseEntity<>(new AuthResponse(token), HttpStatus.OK);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/verify")
+    public ResponseEntity<?> verifyEmail(@RequestParam("token") String token) {
+        try {
+            var opt = verificationTokenRepository.findByToken(token);
+            String html;
+            if (opt.isEmpty()) {
+                html = buildHtmlPage("Token inválido", "El token proporcionado no es válido.", false);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).contentType(MediaType.TEXT_HTML).body(html);
+            }
+            var vt = opt.get();
+            if (Boolean.TRUE.equals(vt.getUsed())) {
+                html = buildHtmlPage("Token ya usado", "Este enlace ya fue utilizado para verificar el correo.", false);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.TEXT_HTML).body(html);
+            }
+            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(LocalDateTime.now())) {
+                html = buildHtmlPage("Token expirado", "El enlace de verificación expiró. Solicita uno nuevo.", false);
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.TEXT_HTML).body(html);
+            }
+
+            var user = vt.getUsuario();
+            user.setEmailVerificado(true);
+            usuarioService.update(user);
+            vt.setUsed(true);
+            verificationTokenRepository.save(vt);
+
+            html = buildHtmlPage("¡Email verificado!", "Tu correo ha sido verificado correctamente. Bienvenido a LivUp.", true);
+            return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
+        } catch (Exception e) {
+            e.printStackTrace();
+            String html = buildHtmlPage("Error", "Ocurrió un error interno. Intenta de nuevo más tarde.", false);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).contentType(MediaType.TEXT_HTML).body(html);
+        }
+    }
+
+    // Helper to build a simple styled HTML response using Midnight Blue & Light Blue palette
+    private String buildHtmlPage(String title, String message, boolean success) {
+        // Colors inspired by the provided image
+        String midnight = "#002b5c"; // midnight blue
+        String light = "#8ec6ff"; // light blue
+
+        String icon = success
+                ? "<svg width=\"84\" height=\"84\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">"
+                  + "<circle cx=\"12\" cy=\"12\" r=\"12\" fill=\"" + light + "\"/>"
+                  + "<path d=\"M6.5 12.5l3.2 3.2L17.5 8.9\" stroke=\"" + midnight + "\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+                  + "</svg>"
+                : "<svg width=\"84\" height=\"84\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">"
+                  + "<circle cx=\"12\" cy=\"12\" r=\"12\" fill=\"" + light + "\"/>"
+                  + "<path d=\"M8 8l8 8M16 8l-8 8\" stroke=\"" + midnight + "\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>"
+                  + "</svg>";
+
+        String html = "<!doctype html>" +
+                "<html lang=\"es\">" +
+                "<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+                "<title>Verificación de correo</title>" +
+                "<style>body{font-family:Inter,Roboto,Arial,sans-serif;background:#f4f8ff;color:#102135;margin:0;padding:0} .container{max-width:720px;margin:64px auto;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(2,30,66,0.06);padding:48px;text-align:center;border-top:8px solid " + light + ";} h1{color:" + midnight + ";margin:18px 0 8px;font-size:24px} p{color:#324a63;margin:0 0 6px;font-size:16px;line-height:1.4} footer{margin-top:28px;color:#6b7a8a;font-size:13px}</style></head>" +
+                "<body><div class=\"container\">" + icon + "<h1>" + title + "</h1><p>" + message + "</p>";
+
+        // No buttons as requested
+
+        html += "<footer>LivUp &copy; " + java.time.Year.now().getValue() + "</footer></div></body></html>";
+        return html;
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody java.util.Map<String, String> body) {
+        try {
+            String email = body.get("email");
+            if (email == null || email.isBlank()) return new ResponseEntity<>(new ErrorResponse("Email requerido"), HttpStatus.BAD_REQUEST);
+            Optional<edu.pe.residencias.model.entity.Persona> p = Optional.empty();
+            // try to find persona by email
+            // persona repository not injected here; use usuarioService to find user by email
+            Optional<edu.pe.residencias.model.entity.Usuario> userOpt = usuarioService.findByUsernameOrEmail(email);
+            if (userOpt.isEmpty()) return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
+            var user = userOpt.get();
+            if (Boolean.TRUE.equals(user.getEmailVerificado())) return new ResponseEntity<>(new ErrorResponse("Email ya verificado"), HttpStatus.BAD_REQUEST);
+
+            // create new token
+            String token = java.util.UUID.randomUUID().toString();
+            edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
+            vt.setToken(token);
+            vt.setUsuario(user);
+            vt.setCreatedAt(LocalDateTime.now());
+            vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+            vt.setUsed(false);
+            verificationTokenRepository.save(vt);
+
+            String verifyLink = "http://localhost:8080/api/auth/verify?token=" + token;
+            String subject = "Verifica tu correo en LivUp";
+            String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
+            emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
+            return new ResponseEntity<>("Token reenviado", HttpStatus.OK);
         } catch (Exception e) {
             e.printStackTrace();
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
