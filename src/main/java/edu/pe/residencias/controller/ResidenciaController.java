@@ -34,6 +34,9 @@ import edu.pe.residencias.model.dto.SimpleResidenciaDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import edu.pe.residencias.model.dto.UbicacionDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import edu.pe.residencias.model.dto.ResidenciaAdminDTO;
 import edu.pe.residencias.model.entity.ImagenResidencia;
 import java.util.stream.Collectors;
 import java.util.Comparator;
@@ -438,6 +441,34 @@ public class ResidenciaController {
             residencia.setServicios(ServiciosUtil.normalizeServiciosText(residencia.getServicios()));
             Residencia updatedResidencia = residenciaService.update(residencia);
             return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
+        }
+    }
+
+    // NUEVO: Listado paginado de todas las residencias (ADMIN)
+    @GetMapping("/admin/paginated")
+    public ResponseEntity<?> getResidenciasPaginatedAdmin(Pageable pageable) {
+        try {
+            Page<Residencia> residenciasPage = residenciaService.findAllPaginated(pageable);
+            if (residenciasPage.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+
+            // Convertir a DTOs
+            List<ResidenciaAdminDTO> dtos = residenciaService.mapToResidenciaAdminDTOs(residenciasPage.getContent());
+            
+            // Crear respuesta con paginación
+            java.util.HashMap<String, Object> response = new java.util.HashMap<>();
+            response.put("content", dtos);
+            response.put("totalElements", residenciasPage.getTotalElements());
+            response.put("totalPages", residenciasPage.getTotalPages());
+            response.put("currentPage", residenciasPage.getNumber());
+            response.put("pageSize", residenciasPage.getSize());
+            response.put("hasNext", residenciasPage.hasNext());
+            response.put("hasPrevious", residenciasPage.hasPrevious());
+
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

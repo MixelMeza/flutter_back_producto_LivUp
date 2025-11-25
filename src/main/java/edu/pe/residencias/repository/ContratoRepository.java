@@ -2,8 +2,13 @@ package edu.pe.residencias.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import edu.pe.residencias.model.entity.Contrato;
+import java.util.List;
 
 @Repository
 public interface ContratoRepository extends JpaRepository<Contrato, Long> {
@@ -11,6 +16,14 @@ public interface ContratoRepository extends JpaRepository<Contrato, Long> {
 	long countBySolicitudEstudianteId(Long estudianteId);
 
 	// count distinct habitaciones that have contracts for a given residencia and contrato estado
-	@org.springframework.data.jpa.repository.Query("select count(distinct c.solicitud.habitacion.id) from Contrato c where c.solicitud.residencia.id = :residenciaId and lower(c.estado) = :estado")
-	long countDistinctHabitacionesByResidenciaIdAndEstado(@org.springframework.data.repository.query.Param("residenciaId") Long residenciaId, @org.springframework.data.repository.query.Param("estado") String estado);
+	@Query("select count(distinct c.solicitud.habitacion.id) from Contrato c where c.solicitud.residencia.id = :residenciaId and lower(c.estado) = :estado")
+	long countDistinctHabitacionesByResidenciaIdAndEstado(@Param("residenciaId") Long residenciaId, @Param("estado") String estado);
+
+	// Obtener contratos vigentes por residencia (para propietario)
+	@Query("SELECT c FROM Contrato c WHERE c.solicitud.residencia.id = :residenciaId AND lower(c.estado) = 'vigente' ORDER BY c.fechaInicio DESC")
+	List<Contrato> findVigorosByResidenciaId(@Param("residenciaId") Long residenciaId);
+
+	// Obtener contratos vigentes paginados por residencia
+	@Query("SELECT c FROM Contrato c WHERE c.solicitud.residencia.id = :residenciaId AND lower(c.estado) = 'vigente' ORDER BY c.fechaInicio DESC")
+	Page<Contrato> findVigorosByResidenciaIdPaginated(@Param("residenciaId") Long residenciaId, Pageable pageable);
 }

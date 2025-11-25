@@ -2,11 +2,15 @@ package edu.pe.residencias.service.impl;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import edu.pe.residencias.model.entity.Contrato;
+import edu.pe.residencias.model.dto.ContratoResumidoDTO;
 import edu.pe.residencias.repository.ContratoRepository;
 import edu.pe.residencias.service.ContratoService;
 
@@ -67,5 +71,46 @@ public class ContratoServiceImpl implements ContratoService {
     @Override
     public List<Contrato> readAll() {
         return repository.findAll();
+    }
+
+    @Override
+    public List<Contrato> findVigorosByResidenciaId(Long residenciaId) {
+        return repository.findVigorosByResidenciaId(residenciaId);
+    }
+
+    @Override
+    public Page<Contrato> findVigorosByResidenciaIdPaginated(Long residenciaId, Pageable pageable) {
+        return repository.findVigorosByResidenciaIdPaginated(residenciaId, pageable);
+    }
+
+    @Override
+    public List<ContratoResumidoDTO> mapToContratoResumidoDTOs(List<Contrato> contratos) {
+        return contratos.stream().map(contrato -> {
+            ContratoResumidoDTO dto = new ContratoResumidoDTO();
+            dto.setId(contrato.getId());
+            
+            // Obtener datos del estudiante
+            if (contrato.getSolicitud() != null && contrato.getSolicitud().getEstudiante() != null) {
+                var estudiante = contrato.getSolicitud().getEstudiante();
+                if (estudiante.getPersona() != null) {
+                    dto.setEstudiante(estudiante.getPersona().getNombre() + " " + estudiante.getPersona().getApellido());
+                    dto.setEmail(estudiante.getPersona().getEmail());
+                }
+            }
+            
+            // Obtener datos de la habitación
+            if (contrato.getSolicitud() != null && contrato.getSolicitud().getHabitacion() != null) {
+                var habitacion = contrato.getSolicitud().getHabitacion();
+                dto.setHabitacion(habitacion.getCodigoHabitacion() != null ? habitacion.getCodigoHabitacion() : habitacion.getNombre());
+            }
+            
+            dto.setFechaInicio(contrato.getFechaInicio());
+            dto.setFechaFin(contrato.getFechaFin());
+            dto.setFechaProximaRenovacion(contrato.getFechaProximaRenovacion());
+            dto.setMontoTotal(contrato.getMontoTotal());
+            dto.setEstado(contrato.getEstado());
+            
+            return dto;
+        }).collect(Collectors.toList());
     }
 }
