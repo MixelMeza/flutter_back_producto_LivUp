@@ -51,6 +51,8 @@ public class Residencia {
     @Column(name = "reglamento_url")
     private String reglamentoUrl;
 
+    
+
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 

@@ -16,7 +16,10 @@ public interface ResidenciaService {
     Optional<Residencia> read(Long id);
     List<Residencia> readAll();
     
-    // Nuevos métodos
+    // Métodos para admin - paginación
     Page<Residencia> findAllPaginated(Pageable pageable);
     List<ResidenciaAdminDTO> mapToResidenciaAdminDTOs(List<Residencia> residencias);
+
+    // Paginated search; if q is null or empty, returns all residencias paginated
+    Page<Residencia> search(String q, Pageable pageable);
 }

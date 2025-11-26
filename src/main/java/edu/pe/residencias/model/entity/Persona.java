@@ -62,6 +62,8 @@ public class Persona {
     @Column(name = "foto_url")
     private String fotoUrl;
 
+    
+
     @Column(name = "notas", columnDefinition = "TEXT")
     private String notas;
 

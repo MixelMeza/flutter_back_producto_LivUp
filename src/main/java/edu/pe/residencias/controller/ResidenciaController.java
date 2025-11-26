@@ -2,6 +2,9 @@ package edu.pe.residencias.controller;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -85,6 +88,26 @@ public class ResidenciaController {
             return new ResponseEntity<>(residencias, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Public search endpoint with pagination. Example: /api/residencias/search?q=centro&page=0&size=10
+    @GetMapping("/search")
+    public ResponseEntity<?> searchResidencias(@org.springframework.web.bind.annotation.RequestParam(name = "q", required = false) String q,
+                                               @org.springframework.web.bind.annotation.RequestParam(name = "page", defaultValue = "0") int page,
+                                               @org.springframework.web.bind.annotation.RequestParam(name = "size", defaultValue = "10") int size) {
+        try {
+            if (page < 0) page = 0;
+            if (size <= 0) size = 10;
+            Pageable pageable = PageRequest.of(page, size);
+            Page<Residencia> result = residenciaService.search(q, pageable);
+            if (result == null || result.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+            return new ResponseEntity<>(result, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error en /api/residencias/search", e);
+            return new ResponseEntity<>("Error interno al buscar residencias", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

@@ -1,3 +1,4 @@
+
 package edu.pe.residencias.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -6,6 +7,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.util.List;
+import java.util.Optional;
 
 import edu.pe.residencias.model.entity.Contrato;
 import java.util.List;
@@ -26,4 +30,12 @@ public interface ContratoRepository extends JpaRepository<Contrato, Long> {
 	// Obtener contratos vigentes paginados por residencia
 	@Query("SELECT c FROM Contrato c WHERE c.solicitud.residencia.id = :residenciaId AND lower(c.estado) = 'vigente' ORDER BY c.fechaInicio DESC")
 	Page<Contrato> findVigorosByResidenciaIdPaginated(@Param("residenciaId") Long residenciaId, Pageable pageable);
+
+	// Find vigente contract for a given inquilino (usuario) id
+	@Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) = 'vigente'")
+	Optional<Contrato> findContratoVigenteByUsuarioId(@Param("usuarioId") Long usuarioId);
+
+	// Find all contracts for a given inquilino (usuario) id except those with estado 'vigente'
+	@Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) <> 'vigente'")
+	List<Contrato> findHistorialContratosByUsuarioId(@Param("usuarioId") Long usuarioId);
 }

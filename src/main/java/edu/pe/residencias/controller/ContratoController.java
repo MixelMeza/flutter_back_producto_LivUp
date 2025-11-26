@@ -31,7 +31,18 @@ import edu.pe.residencias.repository.UsuarioRepository;
 @RestController
 @RequestMapping("/api/contratos")
 public class ContratoController {
-    
+    // Endpoint para obtener el historial de contratos de un inquilino (excepto
+    // vigente)
+    @GetMapping("/historial/usuario/{usuarioId}")
+    public ResponseEntity<?> getHistorialContratosByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
+        List<Contrato> historial = contratoService.getHistorialContratosByUsuarioId(usuarioId);
+        if (historial.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No se encontraron contratos previos para este usuario");
+        }
+        return ResponseEntity.ok(historial);
+    }
+
     @Autowired
     private ContratoService contratoService;
 
@@ -148,6 +159,18 @@ public class ContratoController {
         } catch (Exception e) {
             e.printStackTrace();
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Endpoint para obtener el contrato vigente de un inquilino por su id
+    @GetMapping("/vigente/usuario/{usuarioId}")
+    public ResponseEntity<?> getContratoVigenteByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
+        Optional<Contrato> contrato = contratoService.getContratoVigenteByUsuarioId(usuarioId);
+        if (contrato.isPresent()) {
+            return new ResponseEntity<>(contrato.get(), HttpStatus.OK);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("No cuenta con contrato vigente");
         }
     }
 }

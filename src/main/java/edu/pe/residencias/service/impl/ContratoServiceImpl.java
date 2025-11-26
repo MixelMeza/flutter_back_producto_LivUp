@@ -113,4 +113,14 @@ public class ContratoServiceImpl implements ContratoService {
             return dto;
         }).collect(Collectors.toList());
     }
+
+    @Override
+    public Optional<Contrato> getContratoVigenteByUsuarioId(Long usuarioId) {
+        return repository.findContratoVigenteByUsuarioId(usuarioId);
+    }
+
+    @Override
+    public List<Contrato> getHistorialContratosByUsuarioId(Long usuarioId) {
+        return repository.findHistorialContratosByUsuarioId(usuarioId);
+    }
 }

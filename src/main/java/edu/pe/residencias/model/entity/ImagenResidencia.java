@@ -47,6 +47,8 @@ public class ImagenResidencia {
     @Column(name = "url")
     private String url;
 
+    
+
     @Column(name = "orden")
     private Integer orden;
 

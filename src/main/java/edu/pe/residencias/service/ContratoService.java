@@ -16,8 +16,12 @@ public interface ContratoService {
     Optional<Contrato> read(Long id);
     List<Contrato> readAll();
     
-    // Nuevos métodos
+    // Métodos para propietario - contratos vigentes por residencia
     List<Contrato> findVigorosByResidenciaId(Long residenciaId);
     Page<Contrato> findVigorosByResidenciaIdPaginated(Long residenciaId, Pageable pageable);
     List<ContratoResumidoDTO> mapToContratoResumidoDTOs(List<Contrato> contratos);
+
+    // Métodos para estudiante - historial de contratos
+    Optional<Contrato> getContratoVigenteByUsuarioId(Long usuarioId);
+    List<Contrato> getHistorialContratosByUsuarioId(Long usuarioId);
 }
