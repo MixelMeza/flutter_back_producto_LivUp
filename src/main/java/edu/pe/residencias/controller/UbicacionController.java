@@ -75,6 +75,12 @@ public class UbicacionController {
         if (u.isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         } else {
+            // ensure the incoming object refers to the existing id to avoid creating a new row
+            ubicacion.setId(id);
+            // alternatively, copy only provided fields into existing entity to avoid nulling fields
+            // Ubicacion existing = u.get();
+            // if (ubicacion.getDireccion() != null) existing.setDireccion(ubicacion.getDireccion());
+            // ... (copy other fields similarly)
             Ubicacion updatedUbicacion = ubicacionService.update(ubicacion);
             return new ResponseEntity<>(updatedUbicacion, HttpStatus.OK);
         }

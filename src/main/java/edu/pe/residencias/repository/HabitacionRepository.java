@@ -10,6 +10,7 @@ import edu.pe.residencias.model.entity.Habitacion;
 @Repository
 public interface HabitacionRepository extends JpaRepository<Habitacion, Long> {
 	long countByResidenciaId(Long residenciaId);
+	long countByResidenciaIdAndEstado(Long residenciaId, String estado);
 	List<Habitacion> findByResidenciaId(Long residenciaId);
 	List<Habitacion> findByResidenciaIdAndEstado(Long residenciaId, String estado);
 }

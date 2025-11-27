@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import edu.pe.residencias.model.entity.Residencia;
 import edu.pe.residencias.model.dto.ResidenciaAdminDTO;
 import edu.pe.residencias.repository.ResidenciaRepository;
+import edu.pe.residencias.model.dto.MapResidenciaDTO;
 import edu.pe.residencias.repository.HabitacionRepository;
 import edu.pe.residencias.repository.ContratoRepository;
 import edu.pe.residencias.service.ResidenciaService;
@@ -38,7 +39,31 @@ public class ResidenciaServiceImpl implements ResidenciaService {
     private ImagenResidenciaRepository imagenResidenciaRepository;
 
     @Autowired
+    private edu.pe.residencias.repository.ReviewRepository reviewRepository;
+
+    @Autowired
     private CloudinaryService cloudinaryService;
+
+    @Override
+    public java.util.List<MapResidenciaDTO> findForMap() {
+        java.util.List<Residencia> list = repository.findAllActiveWithVerifiedUsuario();
+        java.util.List<MapResidenciaDTO> out = new java.util.ArrayList<>();
+        for (Residencia r : list) {
+            Double lat = null;
+            Double lng = null;
+            try {
+                if (r.getUbicacion() != null) {
+                    var ub = r.getUbicacion();
+                    if (ub.getLatitud() != null) lat = ub.getLatitud().doubleValue();
+                    if (ub.getLongitud() != null) lng = ub.getLongitud().doubleValue();
+                }
+            } catch (Exception ignore) {}
+            if (lat == null || lng == null) continue; // skip entries without coords
+            MapResidenciaDTO dto = new MapResidenciaDTO(r.getId(), r.getNombre() == null ? "" : r.getNombre(), lat, lng, r.getTipo() == null ? "residencia" : r.getTipo());
+            out.add(dto);
+        }
+        return out;
+    }
 
     @Override
     public Residencia create(Residencia residencia) {
@@ -118,6 +143,74 @@ public class ResidenciaServiceImpl implements ResidenciaService {
     @Override
     public Page<Residencia> findAllPaginated(Pageable pageable) {
         return repository.findAll(pageable);
+    }
+
+    @Override
+    public edu.pe.residencias.model.dto.ResidenciaCardDTO getCardById(Long id) {
+        java.util.Optional<Residencia> opt = repository.findById(id);
+        if (opt.isEmpty()) return null;
+        Residencia r = opt.get();
+
+        // imagen principal: minimal orden (null -> treat as large)
+        String imagenPrincipal = null;
+        try {
+            java.util.List<edu.pe.residencias.model.entity.ImagenResidencia> imgs = imagenResidenciaRepository.findByResidenciaId(id);
+            if (imgs != null && !imgs.isEmpty()) {
+                edu.pe.residencias.model.entity.ImagenResidencia best = null;
+                for (edu.pe.residencias.model.entity.ImagenResidencia im : imgs) {
+                    if (im == null) continue;
+                    if (best == null) { best = im; continue; }
+                    int o1 = best.getOrden() == null ? Integer.MAX_VALUE : best.getOrden();
+                    int o2 = im.getOrden() == null ? Integer.MAX_VALUE : im.getOrden();
+                    if (o2 < o1) best = im;
+                }
+                if (best != null) imagenPrincipal = best.getUrl();
+            }
+        } catch (Exception ignored) {}
+
+        // rating average
+        Double avg = null;
+        try { avg = reviewRepository.findAveragePuntuacionByResidenciaId(id); } catch (Exception ignored) {}
+        Double rating = null;
+        if (avg != null) {
+            // round to one decimal
+            rating = Math.round(avg * 10.0) / 10.0;
+        }
+
+        // precio desde: min precio mensual among available habitaciones
+        java.math.BigDecimal precioDesde = null;
+        try {
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaIdAndEstado(id, "disponible");
+            if (hs == null || hs.isEmpty()) {
+                // fallback to any habitaciones
+                hs = habitacionRepository.findByResidenciaId(id);
+            }
+            if (hs != null && !hs.isEmpty()) {
+                java.math.BigDecimal min = null;
+                for (edu.pe.residencias.model.entity.Habitacion h : hs) {
+                    if (h == null || h.getPrecioMensual() == null) continue;
+                    if (min == null || h.getPrecioMensual().compareTo(min) < 0) min = h.getPrecioMensual();
+                }
+                precioDesde = min;
+            }
+        } catch (Exception ignored) {}
+
+        // habitaciones totals and disponibles
+        int total = 0;
+        int disponibles = 0;
+        try { total = (int) habitacionRepository.countByResidenciaId(id); } catch (Exception ignored) {}
+        try { disponibles = (int) habitacionRepository.countByResidenciaIdAndEstado(id, "disponible"); } catch (Exception ignored) {}
+
+        edu.pe.residencias.model.dto.ResidenciaCardDTO dto = new edu.pe.residencias.model.dto.ResidenciaCardDTO();
+        dto.setId(r.getId());
+        dto.setNombre(r.getNombre());
+        dto.setTipo(r.getTipo());
+        dto.setImagen_principal(imagenPrincipal);
+        dto.setRating(rating);
+        dto.setPrecio_desde(precioDesde);
+        dto.setHabitaciones_disponibles(disponibles);
+        dto.setHabitaciones_totales(total);
+        return dto;
     }
 
     @Override

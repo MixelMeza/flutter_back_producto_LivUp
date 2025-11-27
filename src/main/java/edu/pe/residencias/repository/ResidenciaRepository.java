@@ -29,4 +29,8 @@ public interface ResidenciaRepository extends JpaRepository<Residencia, Long> {
 
 	// Paginated list of all residencias
 	Page<Residencia> findAll(Pageable pageable);
+
+	// Residencias whose residencia.estado is active and whose usuario has email verified and is active
+	@Query("select r from Residencia r join r.usuario u join r.ubicacion ub where lower(r.estado) = 'activo' and u.emailVerificado = true and lower(u.estado) = 'activo'")
+	java.util.List<Residencia> findAllActiveWithVerifiedUsuario();
 }

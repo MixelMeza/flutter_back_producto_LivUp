@@ -25,6 +25,10 @@ public interface ResidenciaService {
 
     List<ResidenciaAdminDTO> mapToResidenciaAdminDTOs(List<Residencia> residencias);
 
+        java.util.List<edu.pe.residencias.model.dto.MapResidenciaDTO> findForMap();
+
     // Paginated search; if q is null or empty, returns all residencias paginated
     Page<Residencia> search(String q, Pageable pageable);
+    edu.pe.residencias.model.dto.ResidenciaCardDTO getCardById(Long id);
+
 }

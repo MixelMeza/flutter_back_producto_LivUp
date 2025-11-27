@@ -11,4 +11,5 @@ public interface ImagenResidenciaService {
     void delete(Long id);
     Optional<ImagenResidencia> read(Long id);
     List<ImagenResidencia> readAll();
+    List<ImagenResidencia> updateListForResidencia(Long residenciaId, java.util.List<String> urls);
 }

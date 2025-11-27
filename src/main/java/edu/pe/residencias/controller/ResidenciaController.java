@@ -78,6 +78,9 @@ public class ResidenciaController {
     @Autowired
     private PagoRepository pagoRepository;
 
+    @Autowired
+    private edu.pe.residencias.service.ImagenResidenciaService imagenResidenciaService;
+
     @GetMapping
     public ResponseEntity<List<Residencia>> readAll() {
         try {
@@ -88,6 +91,18 @@ public class ResidenciaController {
             return new ResponseEntity<>(residencias, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/map")
+    public ResponseEntity<?> getResidenciasForMap() {
+        try {
+            java.util.List<edu.pe.residencias.model.dto.MapResidenciaDTO> list = residenciaService.findForMap();
+            if (list.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            return new ResponseEntity<>(list, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error in /api/residencias/map", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -460,6 +475,18 @@ public class ResidenciaController {
         }
     }
 
+    @GetMapping("/{id}/card")
+    public ResponseEntity<?> getResidenciaCard(@PathVariable("id") Long id) {
+        try {
+            var dto = residenciaService.getCardById(id);
+            if (dto == null) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error getting residencia card for id={}", id, e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Residencia> delResidencia(@PathVariable("id") Long id) {
         try {
@@ -505,6 +532,44 @@ public class ResidenciaController {
         Residencia updatedResidencia = residenciaService.update(existing);
         return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
     }
+
+        @PutMapping("/{id}/imagenes")
+        public ResponseEntity<?> updateResidenciaImagenes(HttpServletRequest request, @PathVariable("id") Long id, @RequestBody edu.pe.residencias.model.dto.ImagenesUpdateRequest body) {
+            try {
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+                }
+                String token = authHeader.substring("Bearer ".length()).trim();
+                var claims = jwtUtil.parseToken(token);
+                String uid = claims.get("uid", String.class);
+                if (uid == null || uid.isBlank()) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+                }
+                var usuarioOpt = usuarioRepository.findByUuid(uid);
+                if (usuarioOpt.isEmpty()) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+                }
+                var usuario = usuarioOpt.get();
+
+                var residenciaOpt = residenciaRepository.findByIdWithImagenes(id);
+                if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+                var r = residenciaOpt.get();
+                if (r.getUsuario() == null || !r.getUsuario().getId().equals(usuario.getId())) {
+                    return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+                }
+
+                java.util.List<String> urls = body == null || body.getImagenes() == null ? java.util.List.of() : body.getImagenes();
+                java.util.List<edu.pe.residencias.model.entity.ImagenResidencia> updated = imagenResidenciaService.updateListForResidencia(id, urls);
+                return new ResponseEntity<>(updated, HttpStatus.OK);
+            } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+                logger.warn("JWT parse error in /api/residencias/{id}/imagenes", ex);
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+            } catch (Exception e) {
+                logger.error("Unexpected error in updateResidenciaImagenes", e);
+                return new ResponseEntity<>("Error interno al actualizar imágenes", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+        }
 
     // NUEVO: Listado paginado de todas las residencias (ADMIN)
     @GetMapping("/admin/paginated")
