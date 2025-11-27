@@ -60,6 +60,15 @@ public class JwtUtil {
     }
 
     /**
+     * Extract UUID from JWT token
+     */
+    public UUID extractUUID(String token) {
+        Claims claims = parseToken(token);
+        String uid = claims.get("uid", String.class);
+        return UUID.fromString(uid);
+    }
+
+    /**
      * Generic AES encrypt method (IV + ciphertext, Base64 encoded)
      */
     public String encrypt(String text) throws Exception {
