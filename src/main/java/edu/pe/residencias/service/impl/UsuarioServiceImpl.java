@@ -14,6 +14,7 @@ import edu.pe.residencias.model.dto.UsuarioCreateDTO;
 import edu.pe.residencias.model.entity.Persona;
 import edu.pe.residencias.model.entity.Rol;
 import edu.pe.residencias.model.entity.Usuario;
+import edu.pe.residencias.model.enums.UsuarioEstado;
 import edu.pe.residencias.repository.PersonaRepository;
 import edu.pe.residencias.repository.RolRepository;
 import edu.pe.residencias.repository.UsuarioRepository;
@@ -113,9 +114,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
         u.setPassword(passwordEncoder.encode(dto.getPassword()));
         if (dto.getEstado() == null || dto.getEstado().isEmpty()) {
-            u.setEstado("activo");
+            u.setEstado(UsuarioEstado.ACTIVO);
         } else {
-            u.setEstado(dto.getEstado());
+            u.setEstado(UsuarioEstado.fromValor(dto.getEstado()));
         }
         u.setCreatedAt(LocalDateTime.now());
 

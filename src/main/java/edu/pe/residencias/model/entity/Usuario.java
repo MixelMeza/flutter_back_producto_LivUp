@@ -12,6 +12,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -25,6 +27,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
+
+import edu.pe.residencias.model.enums.UsuarioEstado;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -73,7 +77,8 @@ public class Usuario {
     private String password;
 
     @Column(name = "estado")
-    private String estado; // 'activo', 'inactivo'
+    @Enumerated(EnumType.STRING)
+    private UsuarioEstado estado; // activo, inactivo
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -18,7 +18,7 @@ public class EstadosController {
             EstadosReferenciaDTO estados = EstadosReferenciaDTO.crear();
             return new ResponseEntity<>(estados, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

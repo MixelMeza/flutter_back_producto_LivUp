@@ -26,7 +26,6 @@ import lombok.Setter;
 @Setter
 @Getter
 @Entity
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "ubicaciones")
 public class Ubicacion {
     

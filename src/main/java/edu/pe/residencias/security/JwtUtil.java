@@ -1,7 +1,6 @@
 package edu.pe.residencias.security;
 
 import java.nio.charset.StandardCharsets;
-import java.security.Key;
 import java.time.Instant;
 import java.util.Date;
 import java.util.UUID;

@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
+import edu.pe.residencias.model.enums.UsuarioEstado;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -15,7 +17,7 @@ public class UsuarioAdminDTO {
     private String nombre;
     private String apellido;
     private String rol; // propietario, inquilino, admin
-    private String estado; // activo, inactivo, suspendido
+    private UsuarioEstado estado; // activo, inactivo, suspendido
     private LocalDateTime createdAt;
     private Boolean emailVerificado;
 }

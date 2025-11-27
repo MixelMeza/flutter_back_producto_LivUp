@@ -6,9 +6,10 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.OneToMany;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -20,6 +21,8 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import edu.pe.residencias.model.enums.PagoEstado;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -49,7 +52,8 @@ public class Pago {
     private LocalDateTime fechaPago;
 
     @Column(name = "estado")
-    private String estado; // 'pendiente', 'completado', 'fallido'
+    @Enumerated(EnumType.STRING)
+    private PagoEstado estado; // pendiente, completado, fallido
 
     @OneToMany(mappedBy = "pago", cascade = CascadeType.ALL)
     @com.fasterxml.jackson.annotation.JsonIgnore

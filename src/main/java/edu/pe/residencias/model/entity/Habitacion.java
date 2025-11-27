@@ -25,10 +25,9 @@ import lombok.Setter;
 
 @AllArgsConstructor
 @NoArgsConstructor
-@Setter
 @Getter
+@Setter
 @Entity
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "habitaciones")
 public class Habitacion {
         @jakarta.persistence.PrePersist

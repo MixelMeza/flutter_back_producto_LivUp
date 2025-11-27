@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import edu.pe.residencias.model.entity.Persona;
 import edu.pe.residencias.model.entity.Rol;
 import edu.pe.residencias.model.entity.Usuario;
+import edu.pe.residencias.model.enums.UsuarioEstado;
 import edu.pe.residencias.repository.PersonaRepository;
 import edu.pe.residencias.repository.RolRepository;
 import edu.pe.residencias.repository.UsuarioRepository;
@@ -90,7 +91,7 @@ public class DataInitializer implements CommandLineRunner {
                 u.setUsername(username);
                 u.setPassword(passwordEncoder.encode(rawPassword));
                 u.setEmailVerificado(true);
-                u.setEstado("activo");
+                u.setEstado(UsuarioEstado.ACTIVO);
                 u.setCreatedAt(LocalDateTime.now());
                 // set role admin
                 Rol adminRol = rolRepository.findByNombre("admin").orElse(null);
