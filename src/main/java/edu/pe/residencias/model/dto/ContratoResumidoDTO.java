@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import edu.pe.residencias.model.enums.ContratoEstado;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -18,5 +20,5 @@ public class ContratoResumidoDTO {
     private LocalDate fechaFin;
     private LocalDate fechaProximaRenovacion;
     private BigDecimal montoTotal;
-    private String estado; // vigente, finalizado, cancelado, renovacion
+    private ContratoEstado estado; // vigente, finalizado, cancelado, renovacion
 }

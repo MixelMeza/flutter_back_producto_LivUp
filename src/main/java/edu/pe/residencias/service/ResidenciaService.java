@@ -11,13 +11,18 @@ import edu.pe.residencias.model.dto.ResidenciaAdminDTO;
 
 public interface ResidenciaService {
     Residencia create(Residencia residencia);
+
     Residencia update(Residencia residencia);
+
     void delete(Long id);
+
     Optional<Residencia> read(Long id);
+
     List<Residencia> readAll();
-    
+
     // Métodos para admin - paginación
     Page<Residencia> findAllPaginated(Pageable pageable);
+
     List<ResidenciaAdminDTO> mapToResidenciaAdminDTOs(List<Residencia> residencias);
 
     // Paginated search; if q is null or empty, returns all residencias paginated

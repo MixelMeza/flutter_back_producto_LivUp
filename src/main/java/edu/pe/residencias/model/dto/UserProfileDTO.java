@@ -1,12 +1,13 @@
 package edu.pe.residencias.model.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import edu.pe.residencias.model.enums.UsuarioEstado;
 
 @Data
 @NoArgsConstructor
@@ -26,7 +27,7 @@ public class UserProfileDTO {
     private String direccion;
     private String fecha_nacimiento;
     private String created_at;
-    private String estado;
+    private UsuarioEstado estado;
     private List<String> permisos;
 
     // stats

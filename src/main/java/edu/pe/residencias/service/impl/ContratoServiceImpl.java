@@ -11,6 +11,8 @@ import org.springframework.data.domain.Pageable;
 
 import edu.pe.residencias.model.entity.Contrato;
 import edu.pe.residencias.model.dto.ContratoResumidoDTO;
+import edu.pe.residencias.model.enums.ContratoEstado;
+import edu.pe.residencias.model.enums.SolicitudEstado;
 import edu.pe.residencias.repository.ContratoRepository;
 import edu.pe.residencias.service.ContratoService;
 
@@ -25,25 +27,25 @@ public class ContratoServiceImpl implements ContratoService {
 
     @Override
     public Contrato create(Contrato contrato) {
-        if (contrato.getEstado() == null || contrato.getEstado().isEmpty()) {
-            contrato.setEstado("vigente");
+        if (contrato.getEstado() == null) {
+            contrato.setEstado(ContratoEstado.VIGENTE);
         }
         // Cambiar estado de la solicitud asociada a 'aceptada'
         if (contrato.getSolicitud() != null && contrato.getSolicitud().getId() != null) {
             var solicitudOpt = solicitudAlojamientoRepository.findById(contrato.getSolicitud().getId());
             if (solicitudOpt.isPresent()) {
                 var solicitud = solicitudOpt.get();
-                solicitud.setEstado("aceptada");
+                solicitud.setEstado(SolicitudEstado.ACEPTADA);
                 solicitudAlojamientoRepository.save(solicitud);
                 // Cambiar estado de las demás solicitudes de la misma habitación a 'ocupada'
                 if (solicitud.getHabitacion() != null && solicitud.getHabitacion().getId() != null) {
                     var otrasSolicitudes = solicitudAlojamientoRepository.findAll();
                     for (var otra : otrasSolicitudes) {
                         if (!otra.getId().equals(solicitud.getId()) &&
-                            otra.getHabitacion() != null &&
-                            otra.getHabitacion().getId().equals(solicitud.getHabitacion().getId()) &&
-                            !"aceptada".equals(otra.getEstado())) {
-                            otra.setEstado("ocupada");
+                                otra.getHabitacion() != null &&
+                                otra.getHabitacion().getId().equals(solicitud.getHabitacion().getId()) &&
+                                !SolicitudEstado.ACEPTADA.equals(otra.getEstado())) {
+                            otra.setEstado(SolicitudEstado.OCUPADA);
                             solicitudAlojamientoRepository.save(otra);
                         }
                     }
@@ -88,28 +90,30 @@ public class ContratoServiceImpl implements ContratoService {
         return contratos.stream().map(contrato -> {
             ContratoResumidoDTO dto = new ContratoResumidoDTO();
             dto.setId(contrato.getId());
-            
+
             // Obtener datos del estudiante
             if (contrato.getSolicitud() != null && contrato.getSolicitud().getEstudiante() != null) {
                 var estudiante = contrato.getSolicitud().getEstudiante();
                 if (estudiante.getPersona() != null) {
-                    dto.setEstudiante(estudiante.getPersona().getNombre() + " " + estudiante.getPersona().getApellido());
+                    dto.setEstudiante(
+                            estudiante.getPersona().getNombre() + " " + estudiante.getPersona().getApellido());
                     dto.setEmail(estudiante.getPersona().getEmail());
                 }
             }
-            
+
             // Obtener datos de la habitación
             if (contrato.getSolicitud() != null && contrato.getSolicitud().getHabitacion() != null) {
                 var habitacion = contrato.getSolicitud().getHabitacion();
-                dto.setHabitacion(habitacion.getCodigoHabitacion() != null ? habitacion.getCodigoHabitacion() : habitacion.getNombre());
+                dto.setHabitacion(habitacion.getCodigoHabitacion() != null ? habitacion.getCodigoHabitacion()
+                        : habitacion.getNombre());
             }
-            
+
             dto.setFechaInicio(contrato.getFechaInicio());
             dto.setFechaFin(contrato.getFechaFin());
             dto.setFechaProximaRenovacion(contrato.getFechaProximaRenovacion());
             dto.setMontoTotal(contrato.getMontoTotal());
             dto.setEstado(contrato.getEstado());
-            
+
             return dto;
         }).collect(Collectors.toList());
     }

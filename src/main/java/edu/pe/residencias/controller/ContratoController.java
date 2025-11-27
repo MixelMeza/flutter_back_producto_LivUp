@@ -14,14 +14,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.web.bind.annotation.RequestHeader;
 
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import edu.pe.residencias.model.entity.Contrato;
-import edu.pe.residencias.model.entity.Residencia;
 import edu.pe.residencias.model.dto.ContratoResumidoDTO;
 import edu.pe.residencias.service.ContratoService;
 import edu.pe.residencias.security.JwtUtil;

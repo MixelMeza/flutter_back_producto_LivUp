@@ -22,13 +22,12 @@ import lombok.Setter;
 
 @AllArgsConstructor
 @NoArgsConstructor
-@Setter
 @Getter
+@Setter
 @Entity
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "residencias")
 public class Residencia {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -50,8 +49,6 @@ public class Residencia {
 
     @Column(name = "reglamento_url")
     private String reglamentoUrl;
-
-    
 
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
@@ -98,6 +95,7 @@ public class Residencia {
     @OneToMany(fetch = FetchType.LAZY, mappedBy = "residencia")
     @JsonIgnore
     private Set<ImagenResidencia> imagenesResidencia;
+
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.createdAt == null) {
@@ -107,8 +105,10 @@ public class Residencia {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
         Residencia that = (Residencia) o;
         return id != null && id.equals(that.id);
     }

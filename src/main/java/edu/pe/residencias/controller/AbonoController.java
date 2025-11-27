@@ -30,10 +30,11 @@ public class AbonoController {
     public ResponseEntity<List<Abono>> readAll() {
         try {
             List<Abono> list = abonoService.readAll();
-            if (list.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            if (list.isEmpty())
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             return new ResponseEntity<>(list, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -43,7 +44,7 @@ public class AbonoController {
             Abono a = abonoService.create(abono);
             return new ResponseEntity<>(a, HttpStatus.CREATED);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -51,17 +52,19 @@ public class AbonoController {
     public ResponseEntity<Abono> getById(@PathVariable("id") Long id) {
         try {
             Optional<Abono> opt = abonoService.read(id);
-            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            if (opt.isEmpty())
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             return new ResponseEntity<>(opt.get(), HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable("id") Long id, @Valid @RequestBody Abono abono) {
         Optional<Abono> opt = abonoService.read(id);
-        if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        if (opt.isEmpty())
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         Abono updated = abonoService.update(abono);
         return new ResponseEntity<>(updated, HttpStatus.OK);
     }
@@ -72,7 +75,7 @@ public class AbonoController {
             abonoService.delete(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

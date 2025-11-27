@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -168,6 +169,35 @@ public class UsuarioController {
         } else {
             Usuario updatedUsuario = usuarioService.update(usuario);
             return new ResponseEntity<>(updatedUsuario, HttpStatus.OK);
+        }
+    }
+
+    @PatchMapping("/me")
+    public ResponseEntity<?> updateMyProfile(@RequestBody PersonaUpdateDTO updateDTO, 
+                                           @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            if (authHeader == null || authHeader.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("No token provided"), HttpStatus.UNAUTHORIZED);
+            }
+            String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            Claims claims = jwtUtil.parseToken(token);
+            String uuid = claims.get("uid", String.class);
+            
+            if (uuid == null) {
+                return new ResponseEntity<>(new ErrorResponse("Invalid token"), HttpStatus.UNAUTHORIZED);
+            }
+
+            UserProfileDTO updatedProfile = usuarioService.updateProfileByUuid(uuid, updateDTO);
+            if (updatedProfile == null) {
+                return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
+            }
+
+            return new ResponseEntity<>(updatedProfile, HttpStatus.OK);
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            return new ResponseEntity<>(new ErrorResponse("Token expired"), HttpStatus.UNAUTHORIZED);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Failed to update profile"), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

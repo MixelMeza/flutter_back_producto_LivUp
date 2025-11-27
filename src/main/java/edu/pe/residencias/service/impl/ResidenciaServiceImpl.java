@@ -127,27 +127,30 @@ public class ResidenciaServiceImpl implements ResidenciaService {
             dto.setId(residencia.getId());
             dto.setNombre(residencia.getNombre());
             dto.setTipo(residencia.getTipo());
-            
+
             // Ubicación
             if (residencia.getUbicacion() != null) {
-                dto.setUbicacion(residencia.getUbicacion().getDireccion() + ", " + residencia.getUbicacion().getDistrito());
+                dto.setUbicacion(
+                        residencia.getUbicacion().getDireccion() + ", " + residencia.getUbicacion().getDistrito());
             }
-            
+
             // Propietario
             if (residencia.getUsuario() != null && residencia.getUsuario().getPersona() != null) {
-                dto.setPropietario(residencia.getUsuario().getPersona().getNombre() + " " + residencia.getUsuario().getPersona().getApellido());
+                dto.setPropietario(residencia.getUsuario().getPersona().getNombre() + " "
+                        + residencia.getUsuario().getPersona().getApellido());
             }
-            
+
             dto.setCantidadHabitaciones(residencia.getCantidadHabitaciones());
-            
+
             // Habitaciones ocupadas
-            long ocupadas = contratoRepository.countDistinctHabitacionesByResidenciaIdAndEstado(residencia.getId(), "vigente");
+            long ocupadas = contratoRepository.countDistinctHabitacionesByResidenciaIdAndEstado(residencia.getId(),
+                    "vigente");
             dto.setHabitacionesOcupadas((int) ocupadas);
-            
+
             dto.setEstado(residencia.getEstado());
             dto.setEmailContacto(residencia.getEmailContacto());
             dto.setTelefonoContacto(residencia.getTelefonoContacto());
-            
+
             return dto;
         }).collect(Collectors.toList());
     }

@@ -7,6 +7,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+import org.springframework.lang.NonNull;
 
 @Component
 public class StartupInfo implements ApplicationListener<ApplicationReadyEvent> {
@@ -16,7 +17,7 @@ public class StartupInfo implements ApplicationListener<ApplicationReadyEvent> {
     private Environment env;
 
     @Override
-    public void onApplicationEvent(ApplicationReadyEvent event) {
+    public void onApplicationEvent(@NonNull ApplicationReadyEvent event) {
         try {
             String url = env.getProperty("spring.datasource.url");
             String ddl = env.getProperty("spring.jpa.hibernate.ddl-auto");

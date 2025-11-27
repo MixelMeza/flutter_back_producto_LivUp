@@ -12,6 +12,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -26,16 +28,18 @@ import lombok.Setter;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
+import edu.pe.residencias.model.enums.UsuarioEstado;
+
 @AllArgsConstructor
 @NoArgsConstructor
 @Setter
 @Getter
 @Entity
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"accesos", "residencias", "solicitudesAlojamiento", "reviews", "persona", "rol"})
+@ToString(exclude = { "accesos", "residencias", "solicitudesAlojamiento", "reviews", "persona", "rol" })
 @Table(name = "usuarios")
 public class Usuario {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -73,7 +77,8 @@ public class Usuario {
     private String password;
 
     @Column(name = "estado")
-    private String estado; // 'activo', 'inactivo'
+    @Enumerated(EnumType.STRING)
+    private UsuarioEstado estado; // activo, inactivo
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

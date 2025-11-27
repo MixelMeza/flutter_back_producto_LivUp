@@ -6,9 +6,10 @@ import java.util.List;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.OneToMany;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -21,6 +22,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import edu.pe.residencias.model.enums.PagoEstado;
+
 @AllArgsConstructor
 @NoArgsConstructor
 @Setter
@@ -29,7 +32,7 @@ import lombok.Setter;
 @Data
 @Table(name = "pagos")
 public class Pago {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -49,16 +52,17 @@ public class Pago {
     private LocalDateTime fechaPago;
 
     @Column(name = "estado")
-    private String estado; // 'pendiente', 'completado', 'fallido'
+    @Enumerated(EnumType.STRING)
+    private PagoEstado estado; // pendiente, completado, fallido
 
     @OneToMany(mappedBy = "pago", cascade = CascadeType.ALL)
     @com.fasterxml.jackson.annotation.JsonIgnore
     private List<Abono> abonos;
 
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.fechaPago == null) {
-                this.fechaPago = java.time.LocalDateTime.now();
-            }
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.fechaPago == null) {
+            this.fechaPago = java.time.LocalDateTime.now();
         }
+    }
 }

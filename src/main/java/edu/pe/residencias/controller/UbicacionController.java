@@ -22,7 +22,7 @@ import edu.pe.residencias.service.UbicacionService;
 @RestController
 @RequestMapping("/api/ubicaciones")
 public class UbicacionController {
-    
+
     @Autowired
     private UbicacionService ubicacionService;
 
@@ -35,7 +35,7 @@ public class UbicacionController {
             }
             return new ResponseEntity<>(ubicaciones, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -45,7 +45,7 @@ public class UbicacionController {
             Ubicacion u = ubicacionService.create(ubicacion);
             return new ResponseEntity<>(u, HttpStatus.CREATED);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -55,7 +55,7 @@ public class UbicacionController {
             Ubicacion u = ubicacionService.read(id).get();
             return new ResponseEntity<>(u, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -65,7 +65,7 @@ public class UbicacionController {
             ubicacionService.delete(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

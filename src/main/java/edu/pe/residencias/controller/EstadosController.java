@@ -11,14 +11,14 @@ import edu.pe.residencias.model.dto.EstadosReferenciaDTO;
 @RestController
 @RequestMapping("/api/estados")
 public class EstadosController {
-    
+
     @GetMapping("/referencia")
     public ResponseEntity<EstadosReferenciaDTO> getEstadosReferencia() {
         try {
             EstadosReferenciaDTO estados = EstadosReferenciaDTO.crear();
             return new ResponseEntity<>(estados, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

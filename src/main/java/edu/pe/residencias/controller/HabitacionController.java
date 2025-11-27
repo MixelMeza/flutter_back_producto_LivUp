@@ -25,7 +25,7 @@ import edu.pe.residencias.repository.ResidenciaRepository;
 @RestController
 @RequestMapping("/api/habitaciones")
 public class HabitacionController {
-    
+
     @Autowired
     private HabitacionService habitacionService;
     
@@ -44,7 +44,7 @@ public class HabitacionController {
             }
             return new ResponseEntity<>(habitaciones, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -54,7 +54,7 @@ public class HabitacionController {
             Habitacion h = habitacionService.create(habitacion);
             return new ResponseEntity<>(h, HttpStatus.CREATED);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -64,7 +64,20 @@ public class HabitacionController {
             Habitacion h = habitacionService.read(id).get();
             return new ResponseEntity<>(h, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/residencia/{residenciaId}")
+    public ResponseEntity<List<Habitacion>> getHabitacionesPorResidencia(@PathVariable("residenciaId") Long residenciaId) {
+        try {
+            List<Habitacion> habitaciones = habitacionService.findByResidenciaId(residenciaId);
+            if (habitaciones.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+            return new ResponseEntity<>(habitaciones, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -74,7 +87,7 @@ public class HabitacionController {
             habitacionService.delete(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

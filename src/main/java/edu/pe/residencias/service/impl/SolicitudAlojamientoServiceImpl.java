@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import edu.pe.residencias.model.entity.SolicitudAlojamiento;
+import edu.pe.residencias.model.enums.SolicitudEstado;
 import edu.pe.residencias.repository.SolicitudAlojamientoRepository;
 import edu.pe.residencias.service.SolicitudAlojamientoService;
 
@@ -18,8 +19,8 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
 
     @Override
     public SolicitudAlojamiento create(SolicitudAlojamiento solicitudAlojamiento) {
-        if (solicitudAlojamiento.getEstado() == null || solicitudAlojamiento.getEstado().isEmpty()) {
-            solicitudAlojamiento.setEstado("pendiente");
+        if (solicitudAlojamiento.getEstado() == null) {
+            solicitudAlojamiento.setEstado(SolicitudEstado.PENDIENTE);
         }
         return repository.save(solicitudAlojamiento);
     }

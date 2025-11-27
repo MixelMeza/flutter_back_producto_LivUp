@@ -21,13 +21,12 @@ import lombok.Setter;
 
 @AllArgsConstructor
 @NoArgsConstructor
-@Setter
 @Getter
+@Setter
 @Entity
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "universidades")
 public class Universidad {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -44,16 +43,18 @@ public class Universidad {
     @JsonIgnore
     private Set<Residencia> residencias;
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Universidad that = (Universidad) o;
-            return id != null && id.equals(that.id);
-        }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        Universidad that = (Universidad) o;
+        return id != null && id.equals(that.id);
+    }
 
-        @Override
-        public int hashCode() {
-            return id != null ? id.hashCode() : 0;
-        }
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
+    }
 }

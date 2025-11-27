@@ -82,4 +82,9 @@ public class HabitacionServiceImpl implements HabitacionService {
     public List<Habitacion> readAll() {
         return repository.findAll();
     }
+
+    @Override
+    public List<Habitacion> findByResidenciaId(Long residenciaId) {
+        return repository.findByResidenciaId(residenciaId);
+    }
 }

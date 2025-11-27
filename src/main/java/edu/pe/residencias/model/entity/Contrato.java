@@ -10,6 +10,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -24,6 +26,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import edu.pe.residencias.model.enums.ContratoEstado;
+
 @AllArgsConstructor
 @NoArgsConstructor
 @Setter
@@ -32,13 +36,13 @@ import lombok.Setter;
 @Data
 @Table(name = "contratos")
 public class Contrato {
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.createdAt == null) {
-                this.createdAt = java.time.LocalDateTime.now();
-            }
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = java.time.LocalDateTime.now();
         }
-    
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -70,7 +74,8 @@ public class Contrato {
     private LocalDate fechaProximaRenovacion;
 
     @Column(name = "estado")
-    private String estado; // 'vigente', 'finalizado', 'cancelado', 'renovar'
+    @Enumerated(EnumType.STRING)
+    private ContratoEstado estado; // vigente, finalizado, cancelado, renovar
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -12,16 +12,17 @@ import java.util.List;
 import java.util.Optional;
 
 import edu.pe.residencias.model.entity.Contrato;
-import java.util.List;
 
 @Repository
 public interface ContratoRepository extends JpaRepository<Contrato, Long> {
 	// count contracts for a given student (usuario) id
 	long countBySolicitudEstudianteId(Long estudianteId);
 
-	// count distinct habitaciones that have contracts for a given residencia and contrato estado
+	// count distinct habitaciones that have contracts for a given residencia and
+	// contrato estado
 	@Query("select count(distinct c.solicitud.habitacion.id) from Contrato c where c.solicitud.residencia.id = :residenciaId and lower(c.estado) = :estado")
-	long countDistinctHabitacionesByResidenciaIdAndEstado(@Param("residenciaId") Long residenciaId, @Param("estado") String estado);
+	long countDistinctHabitacionesByResidenciaIdAndEstado(@Param("residenciaId") Long residenciaId,
+			@Param("estado") String estado);
 
 	// Obtener contratos vigentes por residencia (para propietario)
 	@Query("SELECT c FROM Contrato c WHERE c.solicitud.residencia.id = :residenciaId AND lower(c.estado) = 'vigente' ORDER BY c.fechaInicio DESC")
@@ -35,7 +36,8 @@ public interface ContratoRepository extends JpaRepository<Contrato, Long> {
 	@Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) = 'vigente'")
 	Optional<Contrato> findContratoVigenteByUsuarioId(@Param("usuarioId") Long usuarioId);
 
-	// Find all contracts for a given inquilino (usuario) id except those with estado 'vigente'
+	// Find all contracts for a given inquilino (usuario) id except those with
+	// estado 'vigente'
 	@Query("SELECT c FROM Contrato c WHERE c.solicitud.estudiante.id = :usuarioId AND lower(c.estado) <> 'vigente'")
 	List<Contrato> findHistorialContratosByUsuarioId(@Param("usuarioId") Long usuarioId);
 }
