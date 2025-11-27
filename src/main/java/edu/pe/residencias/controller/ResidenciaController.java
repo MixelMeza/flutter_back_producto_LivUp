@@ -471,21 +471,39 @@ public class ResidenciaController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateResidencia(@PathVariable("id") Long id, @Valid @RequestBody Residencia residencia) {
-        Optional<Residencia> r = residenciaService.read(id);
-        if (r.isEmpty()) {
+    public ResponseEntity<?> updateResidencia(@PathVariable("id") Long id, @RequestBody edu.pe.residencias.model.dto.ResidenciaUpdateDTO updateDTO) {
+        Optional<Residencia> opt = residenciaService.read(id);
+        if (opt.isEmpty()) {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        } else {
-            // Validate estado if provided
-            if (residencia.getEstado() != null && !residencia.getEstado().isBlank()) {
-                if (!ResidenciaEstado.isValid(residencia.getEstado())) {
-                    return new ResponseEntity<>("Invalid estado value", HttpStatus.BAD_REQUEST);
-                }
-            }
-            residencia.setServicios(ServiciosUtil.normalizeServiciosText(residencia.getServicios()));
-            Residencia updatedResidencia = residenciaService.update(residencia);
-            return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
         }
+        
+        Residencia existing = opt.get();
+        
+        // Update only the fields provided in the DTO (null means don't update)
+        if (updateDTO.getNombre() != null) {
+            existing.setNombre(updateDTO.getNombre());
+        }
+        if (updateDTO.getTipo() != null) {
+            existing.setTipo(updateDTO.getTipo());
+        }
+        if (updateDTO.getReglamentoUrl() != null) {
+            existing.setReglamentoUrl(updateDTO.getReglamentoUrl());
+        }
+        if (updateDTO.getDescripcion() != null) {
+            existing.setDescripcion(updateDTO.getDescripcion());
+        }
+        if (updateDTO.getTelefonoContacto() != null) {
+            existing.setTelefonoContacto(updateDTO.getTelefonoContacto());
+        }
+        if (updateDTO.getEmailContacto() != null) {
+            existing.setEmailContacto(updateDTO.getEmailContacto());
+        }
+        if (updateDTO.getServicios() != null) {
+            existing.setServicios(ServiciosUtil.normalizeServiciosText(updateDTO.getServicios()));
+        }
+        
+        Residencia updatedResidencia = residenciaService.update(existing);
+        return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
     }
 
     // NUEVO: Listado paginado de todas las residencias (ADMIN)
