@@ -193,6 +193,16 @@ public class ResidenciaController {
             } catch (Exception ex) {
                 logger.warn("Error while syncing cantidadHabitaciones for residencia id={}", r.getId(), ex);
             }
+            // propietario: nombres y apellidos
+            try {
+                if (r.getUsuario() != null && r.getUsuario().getPersona() != null) {
+                    var p = r.getUsuario().getPersona();
+                    dto.setPropietarioNombre(p.getNombre());
+                    dto.setPropietarioApellido(p.getApellido());
+                }
+            } catch (Exception ex) {
+                logger.warn("No se pudo obtener persona del propietario para residencia id={}", r.getId(), ex);
+            }
 
             return new ResponseEntity<>(dto, HttpStatus.OK);
         } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
@@ -338,6 +348,17 @@ public class ResidenciaController {
                     }
                 } catch (Exception ex) {
                     logger.warn("Error while syncing cantidadHabitaciones for debug residencia id={}", r.getId(), ex);
+                }
+
+                // propietario: nombres y apellidos
+                try {
+                    if (r.getUsuario() != null && r.getUsuario().getPersona() != null) {
+                        var p = r.getUsuario().getPersona();
+                        dto.setPropietarioNombre(p.getNombre());
+                        dto.setPropietarioApellido(p.getApellido());
+                    }
+                } catch (Exception ex) {
+                    logger.warn("No se pudo obtener persona del propietario para debug residencia id={}", r.getId(), ex);
                 }
 
                 dtos.add(dto);
