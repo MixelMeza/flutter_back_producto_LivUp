@@ -59,6 +59,19 @@ public class HabitacionController {
         }
     }
 
+    @GetMapping("/residencia/{residenciaId}")
+    public ResponseEntity<List<Habitacion>> getHabitacionesPorResidencia(@PathVariable("residenciaId") Long residenciaId) {
+        try {
+            List<Habitacion> habitaciones = habitacionService.findByResidenciaId(residenciaId);
+            if (habitaciones.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+            return new ResponseEntity<>(habitaciones, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Habitacion> delHabitacion(@PathVariable("id") Long id) {
         try {

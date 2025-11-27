@@ -3,6 +3,7 @@ package edu.pe.residencias.controller.auth;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -164,7 +165,6 @@ public class AuthController {
         try {
             String email = body.get("email");
             if (email == null || email.isBlank()) return new ResponseEntity<>(new ErrorResponse("Email requerido"), HttpStatus.BAD_REQUEST);
-            Optional<edu.pe.residencias.model.entity.Persona> p = Optional.empty();
             // try to find persona by email
             // persona repository not injected here; use usuarioService to find user by email
             Optional<edu.pe.residencias.model.entity.Usuario> userOpt = usuarioService.findByUsernameOrEmail(email);
@@ -190,6 +190,54 @@ public class AuthController {
         } catch (Exception e) {
             e.printStackTrace();
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody java.util.Map<String, String> body, HttpServletRequest request) {
+        try {
+            String currentPassword = body.get("currentPassword");
+            String newPassword = body.get("newPassword");
+            
+            if (currentPassword == null || newPassword == null || currentPassword.isBlank() || newPassword.isBlank()) {
+                return new ResponseEntity<>(new ErrorResponse("Contraseña actual y nueva contraseña son requeridas"), HttpStatus.BAD_REQUEST);
+            }
+
+            // Validate new password strength
+            if (newPassword.length() < 6) {
+                return new ResponseEntity<>(new ErrorResponse("La nueva contraseña debe tener al menos 6 caracteres"), HttpStatus.BAD_REQUEST);
+            }
+
+            // Extract user from JWT token
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return new ResponseEntity<>(new ErrorResponse("Token de autorización requerido"), HttpStatus.UNAUTHORIZED);
+            }
+
+            String token = authHeader.substring(7);
+            Claims claims = jwtUtil.parseToken(token);
+            String username = claims.get("user", String.class);
+            
+            Optional<Usuario> userOpt = usuarioService.findByUsernameOrEmail(username);
+            if (userOpt.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
+            }
+
+            Usuario user = userOpt.get();
+            
+            // Verify current password
+            if (!usuarioService.matchesPassword(currentPassword, user.getPassword())) {
+                return new ResponseEntity<>(new ErrorResponse("Contraseña actual incorrecta"), HttpStatus.UNAUTHORIZED);
+            }
+
+            // Update password
+            user.setPassword(usuarioService.encodePassword(newPassword));
+            usuarioService.update(user);
+
+            return new ResponseEntity<>("Contraseña actualizada exitosamente", HttpStatus.OK);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Error interno del servidor"), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

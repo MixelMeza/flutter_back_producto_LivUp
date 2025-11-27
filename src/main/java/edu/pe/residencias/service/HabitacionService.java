@@ -11,4 +11,5 @@ public interface HabitacionService {
     void delete(Long id);
     Optional<Habitacion> read(Long id);
     List<Habitacion> readAll();
+    List<Habitacion> findByResidenciaId(Long residenciaId);
 }
