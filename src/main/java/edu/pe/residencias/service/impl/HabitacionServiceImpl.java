@@ -22,6 +22,10 @@ public class HabitacionServiceImpl implements HabitacionService {
 
     @Override
     public Habitacion create(Habitacion habitacion) {
+        // Todas las habitaciones se crean en estado disponible
+        if (habitacion.getEstado() == null || habitacion.getEstado().isEmpty()) {
+            habitacion.setEstado("disponible");
+        }
         Habitacion h = repository.save(habitacion);
         // Recalculate cantidad_habitaciones for the residencia
         try {
