@@ -40,10 +40,13 @@ public class JwtUtil {
                 .claim("uid", userId.toString())
                 .setIssuedAt(now)
                 .setExpiration(exp)
-                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)), SignatureAlgorithm.HS256);
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8)),
+                        SignatureAlgorithm.HS256);
 
-        if (username != null) builder.claim("user", username);
-        if (roleName != null) builder.claim("role", roleName);
+        if (username != null)
+            builder.claim("user", username);
+        if (roleName != null)
+            builder.claim("role", roleName);
 
         return builder.compact();
     }
@@ -54,6 +57,15 @@ public class JwtUtil {
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
+    }
+
+    /**
+     * Extract UUID from JWT token
+     */
+    public UUID extractUUID(String token) {
+        Claims claims = parseToken(token);
+        String uid = claims.get("uid", String.class);
+        return UUID.fromString(uid);
     }
 
     /**
@@ -92,6 +104,11 @@ public class JwtUtil {
     }
 
     // Backwards-compatible names
-    public String encryptUuid(String uuid) throws Exception { return encrypt(uuid); }
-    public String decryptUuid(String encrypted) throws Exception { return decrypt(encrypted); }
+    public String encryptUuid(String uuid) throws Exception {
+        return encrypt(uuid);
+    }
+
+    public String decryptUuid(String encrypted) throws Exception {
+        return decrypt(encrypted);
+    }
 }

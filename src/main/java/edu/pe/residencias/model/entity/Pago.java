@@ -32,7 +32,7 @@ import edu.pe.residencias.model.enums.PagoEstado;
 @Data
 @Table(name = "pagos")
 public class Pago {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -59,10 +59,10 @@ public class Pago {
     @com.fasterxml.jackson.annotation.JsonIgnore
     private List<Abono> abonos;
 
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.fechaPago == null) {
-                this.fechaPago = java.time.LocalDateTime.now();
-            }
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.fechaPago == null) {
+            this.fechaPago = java.time.LocalDateTime.now();
         }
+    }
 }

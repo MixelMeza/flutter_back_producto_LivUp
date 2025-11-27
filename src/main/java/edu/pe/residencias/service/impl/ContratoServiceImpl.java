@@ -14,7 +14,9 @@ import edu.pe.residencias.model.dto.ContratoResumidoDTO;
 import edu.pe.residencias.model.enums.ContratoEstado;
 import edu.pe.residencias.model.enums.SolicitudEstado;
 import edu.pe.residencias.repository.ContratoRepository;
+import edu.pe.residencias.repository.ResidenciaRepository;
 import edu.pe.residencias.service.ContratoService;
+import edu.pe.residencias.service.NotificationService;
 
 @Service
 public class ContratoServiceImpl implements ContratoService {
@@ -24,12 +26,19 @@ public class ContratoServiceImpl implements ContratoService {
 
     @Autowired
     private edu.pe.residencias.repository.SolicitudAlojamientoRepository solicitudAlojamientoRepository;
+    
+    @Autowired
+    private ResidenciaRepository residenciaRepository;
+    
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     public Contrato create(Contrato contrato) {
         if (contrato.getEstado() == null) {
             contrato.setEstado(ContratoEstado.VIGENTE);
         }
+        
         // Cambiar estado de la solicitud asociada a 'aceptada'
         if (contrato.getSolicitud() != null && contrato.getSolicitud().getId() != null) {
             var solicitudOpt = solicitudAlojamientoRepository.findById(contrato.getSolicitud().getId());
@@ -37,6 +46,7 @@ public class ContratoServiceImpl implements ContratoService {
                 var solicitud = solicitudOpt.get();
                 solicitud.setEstado(SolicitudEstado.ACEPTADA);
                 solicitudAlojamientoRepository.save(solicitud);
+                
                 // Cambiar estado de las demás solicitudes de la misma habitación a 'ocupada'
                 if (solicitud.getHabitacion() != null && solicitud.getHabitacion().getId() != null) {
                     var otrasSolicitudes = solicitudAlojamientoRepository.findAll();
@@ -52,7 +62,45 @@ public class ContratoServiceImpl implements ContratoService {
                 }
             }
         }
-        return repository.save(contrato);
+        
+        Contrato saved = repository.save(contrato);
+        
+        // 🔔 NOTIFICACIÓN: CONTRATO_CREADO - Enviar al estudiante
+        try {
+            if (saved.getSolicitud() != null && saved.getSolicitud().getEstudiante() != null) {
+                var estudiante = saved.getSolicitud().getEstudiante();
+                
+                // Obtener nombre de la residencia
+                String nombreResidencia = "la residencia";
+                if (saved.getSolicitud().getResidencia() != null && saved.getSolicitud().getResidencia().getId() != null) {
+                    var residenciaOpt = residenciaRepository.findById(saved.getSolicitud().getResidencia().getId());
+                    if (residenciaOpt.isPresent()) {
+                        nombreResidencia = residenciaOpt.get().getNombre();
+                    }
+                }
+                
+                String titulo = "¡Contrato generado!";
+                String mensaje = "Tu contrato para " + nombreResidencia + " está listo. Revisa los detalles y condiciones.";
+                
+                System.out.println("[NOTIFICACION] Enviando CONTRATO_CREADO al estudiante ID: " + estudiante.getId());
+                
+                notificationService.createNotification(
+                    estudiante,
+                    "CONTRATO_CREADO",
+                    titulo,
+                    mensaje,
+                    "Contrato",
+                    saved.getId()
+                );
+                
+                System.out.println("[NOTIFICACION] Notificación CONTRATO_CREADO enviada exitosamente");
+            }
+        } catch (Exception e) {
+            System.err.println("[NOTIFICACION] Error al enviar notificación CONTRATO_CREADO: " + e.getMessage());
+            e.printStackTrace();
+        }
+        
+        return saved;
     }
 
     @Override

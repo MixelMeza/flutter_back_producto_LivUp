@@ -28,7 +28,7 @@ import lombok.Setter;
 @Entity
 @Table(name = "ubicaciones")
 public class Ubicacion {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -39,7 +39,7 @@ public class Ubicacion {
     private String direccion;
 
     @Column(name = "ciudad")
-    @JsonAlias({"ciudad", "departamento"})
+    @JsonAlias({ "ciudad", "departamento" })
     private String departamento;
 
     @Column(name = "distrito")
@@ -52,27 +52,29 @@ public class Ubicacion {
     private String pais = "Peru";
 
     @Column(name = "latitud", precision = 10, scale = 8)
-    @JsonAlias({"lat", "latitude"})
+    @JsonAlias({ "lat", "latitude" })
     private BigDecimal latitud;
 
     @Column(name = "longitud", precision = 11, scale = 8)
-    @JsonAlias({"lon", "lng", "longitude"})
+    @JsonAlias({ "lon", "lng", "longitude" })
     private BigDecimal longitud;
 
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY, mappedBy = "ubicacion")
     @JsonIgnore
     private Set<Residencia> residencias;
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Ubicacion that = (Ubicacion) o;
-            return id != null && id.equals(that.id);
-        }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        Ubicacion that = (Ubicacion) o;
+        return id != null && id.equals(that.id);
+    }
 
-        @Override
-        public int hashCode() {
-            return id != null ? id.hashCode() : 0;
-        }
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
+    }
 }

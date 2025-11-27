@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import edu.pe.residencias.model.entity.Contrato;
-import edu.pe.residencias.model.entity.Residencia;
 import edu.pe.residencias.model.dto.ContratoResumidoDTO;
 import edu.pe.residencias.service.ContratoService;
 import edu.pe.residencias.security.JwtUtil;

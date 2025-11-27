@@ -74,7 +74,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         p.setTipoDocumento(dto.getTipo_documento());
         p.setDni(dto.getDni());
         if (dto.getFecha_nacimiento() != null && !dto.getFecha_nacimiento().isEmpty()) {
-            // Accept several incoming formats: plain date "yyyy-MM-dd" or date-time like "yyyy-MM-ddTHH:mm:ss(.SSS)"
+            // Accept several incoming formats: plain date "yyyy-MM-dd" or date-time like
+            // "yyyy-MM-ddTHH:mm:ss(.SSS)"
             String raw = dto.getFecha_nacimiento();
             try {
                 if (raw.contains("T")) {
@@ -89,7 +90,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                     String datePart = raw.split("T| ")[0];
                     p.setFechaNacimiento(LocalDate.parse(datePart));
                 } catch (Exception ex2) {
-                    // If still failing, rethrow so caller sees the error (will be logged by controller)
+                    // If still failing, rethrow so caller sees the error (will be logged by
+                    // controller)
                     throw ex;
                 }
             }
@@ -106,7 +108,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         Usuario u = new Usuario();
         u.setPersona(p);
         u.setUsername(dto.getUsername());
-        // Ensure emailVerificado has a sensible default (false) when not provided by the client
+        // Ensure emailVerificado has a sensible default (false) when not provided by
+        // the client
         if (dto.getEmail_verificado() == null) {
             u.setEmailVerificado(false);
         } else {
@@ -123,7 +126,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         Rol rol = null;
         if (dto.getRol_id() != null) {
             Optional<Rol> r = rolRepository.findById(dto.getRol_id());
-            if (r.isPresent()) rol = r.get();
+            if (r.isPresent())
+                rol = r.get();
         }
         if (rol == null) {
             rol = rolRepository.findByNombre("inquilino").orElse(null);
@@ -132,7 +136,8 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         Usuario saved = repository.save(u);
 
-        // If email not verified, generate verification token and send email (best-effort)
+        // If email not verified, generate verification token and send email
+        // (best-effort)
         try {
             Boolean ev = saved.getEmailVerificado();
             if (ev == null || !ev) {
@@ -149,7 +154,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                 String email = saved.getPersona() != null ? saved.getPersona().getEmail() : null;
                 if (email != null && !email.isBlank()) {
                     String subject = "Verifica tu correo en LivUp";
-                    String body = "Bienvenido a LivUp!\n\nPara verificar tu correo haz clic en el siguiente enlace:\n" + verifyLink + "\n\nSi no fuiste tú, ignora este correo.";
+                    String body = "Bienvenido a LivUp!\n\nPara verificar tu correo haz clic en el siguiente enlace:\n"
+                            + verifyLink + "\n\nSi no fuiste tú, ignora este correo.";
                     emailService.sendSimpleMessage(email, subject, body);
                 } else {
                     System.out.println("[UsuarioService] No email present for user id=" + saved.getId());
@@ -181,7 +187,10 @@ public class UsuarioServiceImpl implements UsuarioService {
                 // 1) delete residencias owned by this usuario (and their cloud assets)
                 if (u.getResidencias() != null) {
                     for (var r : u.getResidencias()) {
-                        try { residenciaService.delete(r.getId()); } catch (Exception ex) { }
+                        try {
+                            residenciaService.delete(r.getId());
+                        } catch (Exception ex) {
+                        }
                     }
                 }
 
@@ -189,7 +198,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                 try {
                     verificationTokenRepository.deleteByUsuarioId(u.getId());
                 } catch (Exception ex) {
-                    System.err.println("[UsuarioService] Failed to delete verification tokens for usuarioId=" + u.getId() + ": " + ex.getMessage());
+                    System.err.println("[UsuarioService] Failed to delete verification tokens for usuarioId="
+                            + u.getId() + ": " + ex.getMessage());
                 }
 
                 // 3) delete the usuario record
@@ -201,7 +211,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                         personaRepository.deleteById(u.getPersona().getId());
                     }
                 } catch (Exception ex) {
-                    System.err.println("[UsuarioService] Failed to delete persona for usuarioId=" + u.getId() + ": " + ex.getMessage());
+                    System.err.println("[UsuarioService] Failed to delete persona for usuarioId=" + u.getId() + ": "
+                            + ex.getMessage());
                 }
                 return;
             }
@@ -214,7 +225,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         try {
             repository.deleteById(id);
         } catch (Exception ex) {
-            System.err.println("[UsuarioService] Final attempt to delete usuario failed for id=" + id + ": " + ex.getMessage());
+            System.err.println(
+                    "[UsuarioService] Final attempt to delete usuario failed for id=" + id + ": " + ex.getMessage());
         }
     }
 
@@ -251,7 +263,8 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public UserProfileDTO getProfileByUuid(String uuid) {
         Optional<Usuario> opt = repository.findByUuid(uuid);
-        if (!opt.isPresent()) return null;
+        if (!opt.isPresent())
+            return null;
         Usuario u = opt.get();
         Persona p = u.getPersona();
 
@@ -260,7 +273,9 @@ public class UsuarioServiceImpl implements UsuarioService {
         dto.setUuid(u.getUuid());
         dto.setUsername(u.getUsername());
         String display = "";
-        if (p != null) display = (p.getNombre() == null ? "" : p.getNombre()) + " " + (p.getApellido() == null ? "" : p.getApellido());
+        if (p != null)
+            display = (p.getNombre() == null ? "" : p.getNombre()) + " "
+                    + (p.getApellido() == null ? "" : p.getApellido());
         dto.setDisplayName(display.trim());
         dto.setRol(u.getRol() != null ? u.getRol().getNombre() : null);
         dto.setRol_id(u.getRol() != null ? u.getRol().getId() : null);
@@ -271,7 +286,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         dto.setUbicacion(null);
         dto.setDireccion(p != null ? p.getDireccion() : null);
         dto.setFecha_nacimiento(p != null && p.getFechaNacimiento() != null ? p.getFechaNacimiento().toString() : null);
-        dto.setCreated_at(u.getCreatedAt() != null ? u.getCreatedAt().toString() : (p != null && p.getCreatedAt() != null ? p.getCreatedAt().toString() : null));
+        dto.setCreated_at(u.getCreatedAt() != null ? u.getCreatedAt().toString()
+                : (p != null && p.getCreatedAt() != null ? p.getCreatedAt().toString() : null));
         dto.setEstado(u.getEstado());
         dto.setPermisos(java.util.Collections.emptyList());
 
@@ -283,7 +299,8 @@ public class UsuarioServiceImpl implements UsuarioService {
         dto.setN_abonos((int) nAbonos);
         dto.setSaldo_abonado(saldo != null ? saldo : java.math.BigDecimal.ZERO);
 
-        accesoRepository.findFirstByUsuarioIdOrderByUltimaSesionDesc(u.getId()).ifPresent(a -> dto.setUltima_actividad(a.getUltimaSesion() != null ? a.getUltimaSesion().toString() : null));
+        accesoRepository.findFirstByUsuarioIdOrderByUltimaSesionDesc(u.getId()).ifPresent(
+                a -> dto.setUltima_actividad(a.getUltimaSesion() != null ? a.getUltimaSesion().toString() : null));
 
         return dto;
     }
@@ -292,19 +309,26 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Transactional
     public UserProfileDTO updateProfileByUuid(String uuid, edu.pe.residencias.model.dto.PersonaUpdateDTO dto) {
         Optional<Usuario> opt = repository.findByUuid(uuid);
-        if (opt.isEmpty()) return null;
+        if (opt.isEmpty())
+            return null;
         Usuario u = opt.get();
         Persona p = u.getPersona();
         if (p == null) {
             p = new Persona();
             p.setCreatedAt(java.time.LocalDateTime.now());
         }
-        if (dto.getNombre() != null) p.setNombre(dto.getNombre());
-        if (dto.getApellido() != null) p.setApellido(dto.getApellido());
-        if (dto.getTelefono() != null) p.setTelefono(dto.getTelefono());
-        if (dto.getDireccion() != null) p.setDireccion(dto.getDireccion());
-        if (dto.getFoto_url() != null) p.setFotoUrl(dto.getFoto_url());
-        if (dto.getEmail() != null) p.setEmail(dto.getEmail());
+        if (dto.getNombre() != null)
+            p.setNombre(dto.getNombre());
+        if (dto.getApellido() != null)
+            p.setApellido(dto.getApellido());
+        if (dto.getTelefono() != null)
+            p.setTelefono(dto.getTelefono());
+        if (dto.getDireccion() != null)
+            p.setDireccion(dto.getDireccion());
+        if (dto.getFoto_url() != null)
+            p.setFotoUrl(dto.getFoto_url());
+        if (dto.getEmail() != null)
+            p.setEmail(dto.getEmail());
         if (dto.getFecha_nacimiento() != null && !dto.getFecha_nacimiento().isEmpty()) {
             String raw = dto.getFecha_nacimiento();
             try {
@@ -332,13 +356,15 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public Optional<Usuario> findByUsernameOrEmail(String identifier) {
         Optional<Usuario> byUsername = repository.findByUsername(identifier);
-        if (byUsername.isPresent()) return byUsername;
+        if (byUsername.isPresent())
+            return byUsername;
         // try persona email
         return repository.findByPersonaEmail(identifier);
     }
 
     @Override
-    public org.springframework.data.domain.Page<Usuario> findAllPaginated(org.springframework.data.domain.Pageable pageable) {
+    public org.springframework.data.domain.Page<Usuario> findAllPaginated(
+            org.springframework.data.domain.Pageable pageable) {
         return repository.findAll(pageable);
     }
 
@@ -348,23 +374,23 @@ public class UsuarioServiceImpl implements UsuarioService {
             edu.pe.residencias.model.dto.UsuarioAdminDTO dto = new edu.pe.residencias.model.dto.UsuarioAdminDTO();
             dto.setId(usuario.getId());
             dto.setUsername(usuario.getUsername());
-            
+
             // Email y nombre de persona
             if (usuario.getPersona() != null) {
                 dto.setEmail(usuario.getPersona().getEmail());
                 dto.setNombre(usuario.getPersona().getNombre());
                 dto.setApellido(usuario.getPersona().getApellido());
             }
-            
+
             // Rol
             if (usuario.getRol() != null) {
                 dto.setRol(usuario.getRol().getNombre());
             }
-            
+
             dto.setEstado(usuario.getEstado());
             dto.setCreatedAt(usuario.getCreatedAt());
             dto.setEmailVerificado(usuario.getEmailVerificado());
-            
+
             return dto;
         }).collect(java.util.stream.Collectors.toList());
     }

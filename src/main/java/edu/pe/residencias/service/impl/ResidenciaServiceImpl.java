@@ -45,6 +45,8 @@ public class ResidenciaServiceImpl implements ResidenciaService {
         if (residencia.getEstado() == null || residencia.getEstado().isEmpty()) {
             residencia.setEstado("activo");
         }
+        // Todas las residencias empiezan con 0 habitaciones
+        residencia.setCantidadHabitaciones(0);
         return repository.save(residencia);
     }
 

@@ -54,9 +54,8 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         // ensure there is at least one admin user
-        boolean hasAdmin = rolRepository.findByNombre("admin").map(r ->
-            usuarioRepository.findAll().stream().anyMatch(u -> u.getRol() != null && u.getRol().getNombre().equals("admin"))
-        ).orElse(false);
+        boolean hasAdmin = rolRepository.findByNombre("admin").map(r -> usuarioRepository.findAll().stream()
+                .anyMatch(u -> u.getRol() != null && u.getRol().getNombre().equals("admin"))).orElse(false);
 
         if (!hasAdmin) {
             // create or reuse Persona for admin
