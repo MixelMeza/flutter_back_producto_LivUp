@@ -8,8 +8,8 @@ RUN mvn dependency:resolve
 COPY . .
 RUN mvn -B clean package -DskipTests
 
-
-FROM openjdk:17-jdk-slim
+# Imagen final más ligera
+FROM eclipse-temurin:17-jdk-jammy
 EXPOSE 8080
 COPY --from=build /app/target/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "app.jar"]
