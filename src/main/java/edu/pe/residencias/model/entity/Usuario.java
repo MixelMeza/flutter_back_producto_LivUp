@@ -57,6 +57,10 @@ public class Usuario {
         if (this.createdAt == null) {
             this.createdAt = java.time.LocalDateTime.now();
         }
+        // Default estado for new users
+        if (this.estado == null) {
+            this.estado = UsuarioEstado.ACTIVO;
+        }
     }
 
     @ManyToOne

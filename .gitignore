@@ -32,3 +32,8 @@ build/
 ### VS Code ###
 .vscode/
 backups/
+
+### Firebase ###
+**/firebase*.json
+firebase-*.json
+.firebase/
