@@ -7,6 +7,8 @@ import java.util.List;
 import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import edu.pe.residencias.model.entity.Residencia;
 
