@@ -14,27 +14,46 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import edu.pe.residencias.model.entity.Contrato;
+import edu.pe.residencias.model.entity.Residencia;
+import edu.pe.residencias.model.dto.ContratoResumidoDTO;
 import edu.pe.residencias.service.ContratoService;
+import edu.pe.residencias.security.JwtUtil;
+import edu.pe.residencias.repository.ResidenciaRepository;
+import edu.pe.residencias.repository.UsuarioRepository;
 
 @RestController
 @RequestMapping("/api/contratos")
 public class ContratoController {
-        // Endpoint para obtener el historial de contratos de un inquilino (excepto vigente)
-        @GetMapping("/historial/usuario/{usuarioId}")
-        public ResponseEntity<?> getHistorialContratosByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
-            List<Contrato> historial = contratoService.getHistorialContratosByUsuarioId(usuarioId);
-            if (historial.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+    // Endpoint para obtener el historial de contratos de un inquilino (excepto
+    // vigente)
+    @GetMapping("/historial/usuario/{usuarioId}")
+    public ResponseEntity<?> getHistorialContratosByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
+        List<Contrato> historial = contratoService.getHistorialContratosByUsuarioId(usuarioId);
+        if (historial.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("No se encontraron contratos previos para este usuario");
-            }
-            return ResponseEntity.ok(historial);
         }
-    
+        return ResponseEntity.ok(historial);
+    }
+
     @Autowired
     private ContratoService contratoService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private ResidenciaRepository residenciaRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
 
     @GetMapping
     public ResponseEntity<List<Contrato>> readAll() {
@@ -91,6 +110,58 @@ public class ContratoController {
         }
     }
 
+    // NUEVO: Contratos vigentes del propietario
+    @GetMapping("/propietario/{residenciaId}/vigentes")
+    public ResponseEntity<?> getContratosVigorosPropietario(
+            HttpServletRequest request,
+            @PathVariable("residenciaId") Long residenciaId) {
+        try {
+            // Obtener token y validar
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            }
+
+            // Validar que la residencia existe y pertenece al propietario
+            var residenciaOpt = residenciaRepository.findById(residenciaId);
+            if (residenciaOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Residencia no encontrada");
+            }
+
+            var residencia = residenciaOpt.get();
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            }
+
+            var usuario = usuarioOpt.get();
+            if (!residencia.getUsuario().getId().equals(usuario.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("No tienes permiso para ver estos contratos");
+            }
+
+            // Obtener contratos vigentes
+            List<Contrato> contratos = contratoService.findVigorosByResidenciaId(residenciaId);
+            if (contratos.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+
+            // Mapear a DTOs
+            List<ContratoResumidoDTO> dtos = contratoService.mapToContratoResumidoDTOs(contratos);
+            return new ResponseEntity<>(dtos, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     // Endpoint para obtener el contrato vigente de un inquilino por su id
     @GetMapping("/vigente/usuario/{usuarioId}")
     public ResponseEntity<?> getContratoVigenteByUsuarioId(@PathVariable("usuarioId") Long usuarioId) {
@@ -99,7 +170,7 @@ public class ContratoController {
             return new ResponseEntity<>(contrato.get(), HttpStatus.OK);
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body("No cuenta con contrato vigente");
+                    .body("No cuenta con contrato vigente");
         }
     }
 }

@@ -14,10 +14,13 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import jakarta.validation.Valid;
 import edu.pe.residencias.model.dto.UsuarioCreateDTO;
 import edu.pe.residencias.model.entity.Usuario;
+import edu.pe.residencias.model.dto.UsuarioAdminDTO;
 import edu.pe.residencias.service.UsuarioService;
 import edu.pe.residencias.model.dto.UserProfileDTO;
 import edu.pe.residencias.security.JwtUtil;
@@ -25,7 +28,6 @@ import edu.pe.residencias.controller.auth.ErrorResponse;
 import io.jsonwebtoken.Claims;
 import org.springframework.web.bind.annotation.RequestHeader;
 import edu.pe.residencias.model.dto.PersonaUpdateDTO;
-// imports for date parsing moved to service
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -166,6 +168,34 @@ public class UsuarioController {
         } else {
             Usuario updatedUsuario = usuarioService.update(usuario);
             return new ResponseEntity<>(updatedUsuario, HttpStatus.OK);
+        }
+    }
+
+    // NUEVO: Listado paginado de todos los usuarios (ADMIN)
+    @GetMapping("/admin/paginated")
+    public ResponseEntity<?> getUsuariosPaginatedAdmin(Pageable pageable) {
+        try {
+            Page<Usuario> usuariosPage = usuarioService.findAllPaginated(pageable);
+            if (usuariosPage.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+
+            // Convertir a DTOs
+            List<UsuarioAdminDTO> dtos = usuarioService.mapToUsuarioAdminDTOs(usuariosPage.getContent());
+            
+            // Crear respuesta con paginación
+            java.util.HashMap<String, Object> response = new java.util.HashMap<>();
+            response.put("content", dtos);
+            response.put("totalElements", usuariosPage.getTotalElements());
+            response.put("totalPages", usuariosPage.getTotalPages());
+            response.put("currentPage", usuariosPage.getNumber());
+            response.put("pageSize", usuariosPage.getSize());
+            response.put("hasNext", usuariosPage.hasNext());
+            response.put("hasPrevious", usuariosPage.hasPrevious());
+
+            return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

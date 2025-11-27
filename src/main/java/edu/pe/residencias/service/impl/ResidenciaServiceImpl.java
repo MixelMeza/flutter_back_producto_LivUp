@@ -2,15 +2,21 @@ package edu.pe.residencias.service.impl;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import edu.pe.residencias.model.entity.Residencia;
+import edu.pe.residencias.model.dto.ResidenciaAdminDTO;
 import edu.pe.residencias.repository.ResidenciaRepository;
+import edu.pe.residencias.repository.HabitacionRepository;
+import edu.pe.residencias.repository.ContratoRepository;
 import edu.pe.residencias.service.ResidenciaService;
 import edu.pe.residencias.repository.ImagenResidenciaRepository;
 import edu.pe.residencias.service.CloudinaryService;
@@ -21,6 +27,12 @@ public class ResidenciaServiceImpl implements ResidenciaService {
 
     @Autowired
     private ResidenciaRepository repository;
+
+    @Autowired
+    private HabitacionRepository habitacionRepository;
+
+    @Autowired
+    private ContratoRepository contratoRepository;
 
     @Autowired
     private ImagenResidenciaRepository imagenResidenciaRepository;
@@ -51,7 +63,10 @@ public class ResidenciaServiceImpl implements ResidenciaService {
                 for (ImagenResidencia im : imgs) {
                     String publicId = extractPublicIdFromUrl(im.getUrl());
                     if (publicId != null && !publicId.isBlank()) {
-                        try { cloudinaryService.destroy(publicId, "image"); } catch (Exception ex) { /* ignore individual failures */ }
+                        try {
+                            cloudinaryService.destroy(publicId, "image");
+                        } catch (Exception ex) {
+                            /* ignore individual failures */ }
                     }
                 }
             }
@@ -61,11 +76,15 @@ public class ResidenciaServiceImpl implements ResidenciaService {
                 String reglamentoUrl = residenciaOpt.get().getReglamentoUrl();
                 String reglPublicId = extractPublicIdFromUrl(reglamentoUrl);
                 if (reglPublicId != null && !reglPublicId.isBlank()) {
-                    try { cloudinaryService.destroy(reglPublicId, "raw"); } catch (Exception ex) { /* ignore */ }
+                    try {
+                        cloudinaryService.destroy(reglPublicId, "raw");
+                    } catch (Exception ex) {
+                        /* ignore */ }
                 }
             }
         } catch (Exception e) {
-            // log error if logger available; continue to delete DB records to avoid orphaned references
+            // log error if logger available; continue to delete DB records to avoid
+            // orphaned references
         }
 
         repository.deleteById(id);
@@ -73,9 +92,11 @@ public class ResidenciaServiceImpl implements ResidenciaService {
 
     // Same public id extraction used elsewhere (best-effort)
     private String extractPublicIdFromUrl(String secureUrl) {
-        if (secureUrl == null || secureUrl.isBlank()) return null;
+        if (secureUrl == null || secureUrl.isBlank())
+            return null;
         int idx = secureUrl.indexOf("/upload/");
-        if (idx == -1) return null;
+        if (idx == -1)
+            return null;
         String after = secureUrl.substring(idx + "/upload/".length());
         after = after.replaceFirst("^v\\d+\\/", "");
         String noExt = after.replaceAll("\\.[^/.]+$", "");
@@ -93,6 +114,43 @@ public class ResidenciaServiceImpl implements ResidenciaService {
     }
 
     @Override
+    public Page<Residencia> findAllPaginated(Pageable pageable) {
+        return repository.findAll(pageable);
+    }
+
+    @Override
+    public List<ResidenciaAdminDTO> mapToResidenciaAdminDTOs(List<Residencia> residencias) {
+        return residencias.stream().map(residencia -> {
+            ResidenciaAdminDTO dto = new ResidenciaAdminDTO();
+            dto.setId(residencia.getId());
+            dto.setNombre(residencia.getNombre());
+            dto.setTipo(residencia.getTipo());
+            
+            // Ubicación
+            if (residencia.getUbicacion() != null) {
+                dto.setUbicacion(residencia.getUbicacion().getDireccion() + ", " + residencia.getUbicacion().getDistrito());
+            }
+            
+            // Propietario
+            if (residencia.getUsuario() != null && residencia.getUsuario().getPersona() != null) {
+                dto.setPropietario(residencia.getUsuario().getPersona().getNombre() + " " + residencia.getUsuario().getPersona().getApellido());
+            }
+            
+            dto.setCantidadHabitaciones(residencia.getCantidadHabitaciones());
+            
+            // Habitaciones ocupadas
+            long ocupadas = contratoRepository.countDistinctHabitacionesByResidenciaIdAndEstado(residencia.getId(), "vigente");
+            dto.setHabitacionesOcupadas((int) ocupadas);
+            
+            dto.setEstado(residencia.getEstado());
+            dto.setEmailContacto(residencia.getEmailContacto());
+            dto.setTelefonoContacto(residencia.getTelefonoContacto());
+            
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    // Método de búsqueda de rama remota
     public Page<Residencia> search(String q, Pageable pageable) {
         if (q == null || q.isBlank()) {
             return repository.findAll(pageable);

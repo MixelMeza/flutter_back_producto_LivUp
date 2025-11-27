@@ -335,4 +335,36 @@ public class UsuarioServiceImpl implements UsuarioService {
         // try persona email
         return repository.findByPersonaEmail(identifier);
     }
+
+    @Override
+    public org.springframework.data.domain.Page<Usuario> findAllPaginated(org.springframework.data.domain.Pageable pageable) {
+        return repository.findAll(pageable);
+    }
+
+    @Override
+    public List<edu.pe.residencias.model.dto.UsuarioAdminDTO> mapToUsuarioAdminDTOs(List<Usuario> usuarios) {
+        return usuarios.stream().map(usuario -> {
+            edu.pe.residencias.model.dto.UsuarioAdminDTO dto = new edu.pe.residencias.model.dto.UsuarioAdminDTO();
+            dto.setId(usuario.getId());
+            dto.setUsername(usuario.getUsername());
+            
+            // Email y nombre de persona
+            if (usuario.getPersona() != null) {
+                dto.setEmail(usuario.getPersona().getEmail());
+                dto.setNombre(usuario.getPersona().getNombre());
+                dto.setApellido(usuario.getPersona().getApellido());
+            }
+            
+            // Rol
+            if (usuario.getRol() != null) {
+                dto.setRol(usuario.getRol().getNombre());
+            }
+            
+            dto.setEstado(usuario.getEstado());
+            dto.setCreatedAt(usuario.getCreatedAt());
+            dto.setEmailVerificado(usuario.getEmailVerificado());
+            
+            return dto;
+        }).collect(java.util.stream.Collectors.toList());
+    }
 }

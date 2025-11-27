@@ -23,6 +23,9 @@ public class ResidenciaOwnerDTO {
     private LocalDateTime createdAt;
     private UbicacionDTO ubicacion;
     private List<String> imagenes;
+    // propietario (nombres y apellidos)
+    private String propietarioNombre;
+    private String propietarioApellido;
     // New minimal stats
     private Integer habitacionesOcupadas;
     private Integer habitacionesTotales;
