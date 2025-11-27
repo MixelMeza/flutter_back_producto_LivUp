@@ -41,6 +41,9 @@ public class AuthController {
     @Autowired
     private edu.pe.residencias.service.EmailService emailService;
 
+    @Autowired
+    private edu.pe.residencias.repository.PersonaRepository personaRepository;
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest req, HttpServletRequest request) {
         try {
@@ -161,35 +164,176 @@ public class AuthController {
     }
 
     @PostMapping("/resend-verification")
-    public ResponseEntity<?> resendVerification(@RequestBody java.util.Map<String, String> body) {
+    public ResponseEntity<?> resendVerification(HttpServletRequest request) {
         try {
-            String email = body.get("email");
-            if (email == null || email.isBlank()) return new ResponseEntity<>(new ErrorResponse("Email requerido"), HttpStatus.BAD_REQUEST);
-            // try to find persona by email
-            // persona repository not injected here; use usuarioService to find user by email
-            Optional<edu.pe.residencias.model.entity.Usuario> userOpt = usuarioService.findByUsernameOrEmail(email);
-            if (userOpt.isEmpty()) return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
-            var user = userOpt.get();
-            if (Boolean.TRUE.equals(user.getEmailVerificado())) return new ResponseEntity<>(new ErrorResponse("Email ya verificado"), HttpStatus.BAD_REQUEST);
+            // Extraer usuario del JWT
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return new ResponseEntity<>(new ErrorResponse("Token de autorización requerido"), HttpStatus.UNAUTHORIZED);
+            }
 
-            // create new token
-            String token = java.util.UUID.randomUUID().toString();
+            String token = authHeader.substring(7);
+            Claims claims = jwtUtil.parseToken(token);
+            String username = claims.get("user", String.class);
+            
+            Optional<Usuario> userOpt = usuarioService.findByUsernameOrEmail(username);
+            if (userOpt.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
+            }
+
+            var user = userOpt.get();
+            
+            // Validar que el usuario tenga Persona y email
+            if (user.getPersona() == null || user.getPersona().getEmail() == null || user.getPersona().getEmail().isBlank()) {
+                return new ResponseEntity<>(new ErrorResponse("El usuario no tiene un correo registrado"), HttpStatus.BAD_REQUEST);
+            }
+            
+            if (Boolean.TRUE.equals(user.getEmailVerificado())) {
+                return new ResponseEntity<>(new ErrorResponse("Tu correo ya está verificado"), HttpStatus.BAD_REQUEST);
+            }
+
+            // Invalidar tokens anteriores del mismo usuario
+            var oldTokens = verificationTokenRepository.findByUsuario(user);
+            for (var oldToken : oldTokens) {
+                if (!Boolean.TRUE.equals(oldToken.getUsed())) {
+                    oldToken.setUsed(true);
+                    verificationTokenRepository.save(oldToken);
+                }
+            }
+
+            // Crear nuevo token
+            String verificationToken = java.util.UUID.randomUUID().toString();
             edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
-            vt.setToken(token);
+            vt.setToken(verificationToken);
             vt.setUsuario(user);
             vt.setCreatedAt(LocalDateTime.now());
             vt.setExpiresAt(LocalDateTime.now().plusHours(24));
             vt.setUsed(false);
             verificationTokenRepository.save(vt);
 
-            String verifyLink = "http://localhost:8080/api/auth/verify?token=" + token;
-            String subject = "Verifica tu correo en LivUp";
-            String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
-            emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
-            return new ResponseEntity<>("Token reenviado", HttpStatus.OK);
+            // Enviar email de verificación
+            try {
+                String verifyLink = "http://localhost:8080/api/auth/verify?token=" + verificationToken;
+                String subject = "Verifica tu correo en LivUp";
+                String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
+                emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
+            } catch (Exception emailEx) {
+                System.err.println("[AuthController] Error al enviar email: " + emailEx.getMessage());
+                return new ResponseEntity<>(new ErrorResponse("No se pudo enviar el correo de verificación. Verifica que tu email sea válido."), HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            
+            return new ResponseEntity<>("Correo de verificación enviado exitosamente a " + user.getPersona().getEmail(), HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException jwtEx) {
+            System.err.println("[AuthController] Error JWT: " + jwtEx.getMessage());
+            return new ResponseEntity<>(new ErrorResponse("Token de autenticación inválido o expirado"), HttpStatus.UNAUTHORIZED);
         } catch (Exception e) {
             e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>(new ErrorResponse("Error al reenviar verificación. Intenta de nuevo más tarde."), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/change-email")
+    public ResponseEntity<?> changeEmail(@RequestBody java.util.Map<String, String> body, HttpServletRequest request) {
+        try {
+            String newEmail = body.get("newEmail");
+            
+            if (newEmail == null || newEmail.isBlank()) {
+                return new ResponseEntity<>(new ErrorResponse("El nuevo correo es requerido"), HttpStatus.BAD_REQUEST);
+            }
+            
+            newEmail = newEmail.trim().toLowerCase();
+
+            // Validar formato de email
+            String emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$";
+            if (!newEmail.matches(emailRegex)) {
+                return new ResponseEntity<>(new ErrorResponse("El formato del correo es inválido. Ejemplo: usuario@ejemplo.com"), HttpStatus.BAD_REQUEST);
+            }
+
+            // Extraer usuario del JWT
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return new ResponseEntity<>(new ErrorResponse("Token de autorización requerido"), HttpStatus.UNAUTHORIZED);
+            }
+
+            String token = authHeader.substring(7);
+            Claims claims = jwtUtil.parseToken(token);
+            String username = claims.get("user", String.class);
+            
+            Optional<Usuario> userOpt = usuarioService.findByUsernameOrEmail(username);
+            if (userOpt.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
+            }
+
+            Usuario user = userOpt.get();
+            
+            // Validar que el usuario tenga Persona
+            if (user.getPersona() == null) {
+                return new ResponseEntity<>(new ErrorResponse("El usuario no tiene datos personales registrados"), HttpStatus.BAD_REQUEST);
+            }
+            
+            // Verificar si es el mismo email actual
+            String currentEmail = user.getPersona().getEmail();
+            if (newEmail.equalsIgnoreCase(currentEmail)) {
+                return new ResponseEntity<>(new ErrorResponse("El nuevo correo es igual al actual"), HttpStatus.BAD_REQUEST);
+            }
+            
+            // Verificar que el nuevo email no esté en uso
+            Optional<Usuario> existingUser = usuarioService.findByUsernameOrEmail(newEmail);
+            if (existingUser.isPresent() && !existingUser.get().getId().equals(user.getId())) {
+                return new ResponseEntity<>(new ErrorResponse("El correo " + newEmail + " ya está registrado por otro usuario"), HttpStatus.CONFLICT);
+            }
+
+            // Actualizar email en Persona
+            var persona = user.getPersona();
+            String oldEmail = persona.getEmail();
+            persona.setEmail(newEmail);
+            
+            // Guardar Persona primero (es una entidad independiente)
+            personaRepository.save(persona);
+            
+            // Marcar como no verificado y actualizar Usuario
+            user.setEmailVerificado(false);
+            usuarioService.update(user);
+            
+            System.out.println("[AuthController] Email actualizado de " + oldEmail + " a " + newEmail + " para usuario: " + user.getUsername());
+
+            // Invalidar tokens anteriores
+            var oldTokens = verificationTokenRepository.findByUsuario(user);
+            for (var oldToken : oldTokens) {
+                if (!Boolean.TRUE.equals(oldToken.getUsed())) {
+                    oldToken.setUsed(true);
+                    verificationTokenRepository.save(oldToken);
+                }
+            }
+
+            // Crear nuevo token de verificación
+            String verificationToken = java.util.UUID.randomUUID().toString();
+            edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
+            vt.setToken(verificationToken);
+            vt.setUsuario(user);
+            vt.setCreatedAt(LocalDateTime.now());
+            vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+            vt.setUsed(false);
+            verificationTokenRepository.save(vt);
+
+            // Enviar email de verificación al nuevo correo
+            try {
+                String verifyLink = "http://localhost:8080/api/auth/verify?token=" + verificationToken;
+                String subject = "Verifica tu nuevo correo en LivUp";
+                String bodyText = "Has cambiado tu correo en LivUp. Para verificar tu nuevo correo haz clic en: " + verifyLink;
+                emailService.sendSimpleMessage(newEmail, subject, bodyText);
+            } catch (Exception emailEx) {
+                System.err.println("[AuthController] Error al enviar email de verificación: " + emailEx.getMessage());
+                return new ResponseEntity<>(new ErrorResponse("Email actualizado pero no se pudo enviar el correo de verificación. Verifica que el correo sea válido."), HttpStatus.PARTIAL_CONTENT);
+            }
+
+            return new ResponseEntity<>("Correo actualizado exitosamente. Se ha enviado un email de verificación a " + newEmail, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException jwtEx) {
+            System.err.println("[AuthController] Error JWT: " + jwtEx.getMessage());
+            return new ResponseEntity<>(new ErrorResponse("Token de autenticación inválido o expirado"), HttpStatus.UNAUTHORIZED);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Error al cambiar email"), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

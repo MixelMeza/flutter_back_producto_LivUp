@@ -15,6 +15,8 @@ import edu.pe.residencias.model.entity.VerificationToken;
 public interface VerificationTokenRepository extends JpaRepository<VerificationToken, Long> {
     Optional<VerificationToken> findByToken(String token);
 
+    java.util.List<VerificationToken> findByUsuario(edu.pe.residencias.model.entity.Usuario usuario);
+
     // delete tokens by usuario id using explicit JPQL to avoid derived query issues
     @Modifying
     @Transactional

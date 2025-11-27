@@ -69,7 +69,7 @@ public class SolicitudAlojamiento {
     private Boolean fijo;
 
     @Column(name = "estado")
-    @Enumerated(EnumType.STRING)
+    @jakarta.persistence.Convert(converter = edu.pe.residencias.converter.SolicitudEstadoConverter.class)
     private SolicitudEstado estado; // pendiente, aceptada, rechazada, ocupada
 
     @Column(name = "comentarios", columnDefinition = "TEXT")
