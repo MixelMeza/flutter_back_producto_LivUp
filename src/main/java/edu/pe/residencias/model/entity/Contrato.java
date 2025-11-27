@@ -36,13 +36,13 @@ import edu.pe.residencias.model.enums.ContratoEstado;
 @Data
 @Table(name = "contratos")
 public class Contrato {
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.createdAt == null) {
-                this.createdAt = java.time.LocalDateTime.now();
-            }
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = java.time.LocalDateTime.now();
         }
-    
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")

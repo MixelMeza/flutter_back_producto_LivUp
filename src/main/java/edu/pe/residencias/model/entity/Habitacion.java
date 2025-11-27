@@ -30,13 +30,13 @@ import lombok.Setter;
 @Entity
 @Table(name = "habitaciones")
 public class Habitacion {
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.createdAt == null) {
-                this.createdAt = java.time.LocalDateTime.now();
-            }
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.createdAt == null) {
+            this.createdAt = java.time.LocalDateTime.now();
         }
-    
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -100,16 +100,18 @@ public class Habitacion {
     @JsonIgnore
     private Set<ImagenHabitacion> imagenesHabitacion;
 
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Habitacion that = (Habitacion) o;
-            return id != null && id.equals(that.id);
-        }
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        Habitacion that = (Habitacion) o;
+        return id != null && id.equals(that.id);
+    }
 
-        @Override
-        public int hashCode() {
-            return id != null ? id.hashCode() : 0;
-        }
+    @Override
+    public int hashCode() {
+        return id != null ? id.hashCode() : 0;
+    }
 }

@@ -22,7 +22,7 @@ import edu.pe.residencias.service.HabitacionService;
 @RestController
 @RequestMapping("/api/habitaciones")
 public class HabitacionController {
-    
+
     @Autowired
     private HabitacionService habitacionService;
 

@@ -36,10 +36,10 @@ import edu.pe.residencias.model.enums.UsuarioEstado;
 @Getter
 @Entity
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"accesos", "residencias", "solicitudesAlojamiento", "reviews", "persona", "rol"})
+@ToString(exclude = { "accesos", "residencias", "solicitudesAlojamiento", "reviews", "persona", "rol" })
 @Table(name = "usuarios")
 public class Usuario {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")

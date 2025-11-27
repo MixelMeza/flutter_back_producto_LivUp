@@ -11,7 +11,7 @@ import edu.pe.residencias.model.dto.EstadosReferenciaDTO;
 @RestController
 @RequestMapping("/api/estados")
 public class EstadosController {
-    
+
     @GetMapping("/referencia")
     public ResponseEntity<EstadosReferenciaDTO> getEstadosReferencia() {
         try {

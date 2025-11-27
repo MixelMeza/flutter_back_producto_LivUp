@@ -38,7 +38,8 @@ public class ImagenHabitacionController {
     public ResponseEntity<List<ImagenHabitacion>> readAll() {
         try {
             List<ImagenHabitacion> imagenes = imagenHabitacionService.readAll();
-            if (imagenes.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            if (imagenes.isEmpty())
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             return new ResponseEntity<>(imagenes, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -69,7 +70,8 @@ public class ImagenHabitacionController {
     public ResponseEntity<?> getImagenHabitacionId(@PathVariable("id") Long id) {
         try {
             Optional<ImagenHabitacion> opt = imagenHabitacionService.read(id);
-            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            if (opt.isEmpty())
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             return new ResponseEntity<>(opt.get(), HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -77,9 +79,11 @@ public class ImagenHabitacionController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateImagenHabitacion(@PathVariable("id") Long id, @Valid @RequestBody ImagenHabitacion imagenHabitacion) {
+    public ResponseEntity<?> updateImagenHabitacion(@PathVariable("id") Long id,
+            @Valid @RequestBody ImagenHabitacion imagenHabitacion) {
         Optional<ImagenHabitacion> i = imagenHabitacionService.read(id);
-        if (i.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        if (i.isEmpty())
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         try {
             ImagenHabitacion existing = i.get();
             existing.setOrden(imagenHabitacion.getOrden());
@@ -95,7 +99,8 @@ public class ImagenHabitacionController {
     public ResponseEntity<?> delImagenHabitacion(@PathVariable("id") Long id) {
         try {
             Optional<ImagenHabitacion> opt = imagenHabitacionService.read(id);
-            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            if (opt.isEmpty())
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             ImagenHabitacion img = opt.get();
             String publicId = extractPublicIdFromUrl(img.getUrl());
             if (publicId != null && !publicId.isBlank()) {
@@ -108,11 +113,14 @@ public class ImagenHabitacionController {
         }
     }
 
-    // Extract Cloudinary public_id from a secure_url (best-effort). Returns null if can't parse.
+    // Extract Cloudinary public_id from a secure_url (best-effort). Returns null if
+    // can't parse.
     private String extractPublicIdFromUrl(String secureUrl) {
-        if (secureUrl == null || secureUrl.isBlank()) return null;
+        if (secureUrl == null || secureUrl.isBlank())
+            return null;
         int idx = secureUrl.indexOf("/upload/");
-        if (idx == -1) return null;
+        if (idx == -1)
+            return null;
         String after = secureUrl.substring(idx + "/upload/".length());
         after = after.replaceFirst("^v\\d+\\/", "");
         String noExt = after.replaceAll("\\.[^/.]+$", "");

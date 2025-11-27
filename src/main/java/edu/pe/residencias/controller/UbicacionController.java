@@ -22,7 +22,7 @@ import edu.pe.residencias.service.UbicacionService;
 @RestController
 @RequestMapping("/api/ubicaciones")
 public class UbicacionController {
-    
+
     @Autowired
     private UbicacionService ubicacionService;
 
