@@ -8,8 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -69,7 +68,7 @@ public class SolicitudAlojamiento {
     private Boolean fijo;
 
     @Column(name = "estado")
-    @Enumerated(EnumType.STRING)
+    @jakarta.persistence.Convert(converter = edu.pe.residencias.model.converter.SolicitudEstadoConverter.class)
     private SolicitudEstado estado; // pendiente, aceptada, rechazada, ocupada
 
     @Column(name = "comentarios", columnDefinition = "TEXT")
