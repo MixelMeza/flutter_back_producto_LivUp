@@ -16,6 +16,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -86,8 +87,9 @@ public class Habitacion {
     @Column(name = "precio_mensual", precision = 10, scale = 2)
     private BigDecimal precioMensual;
 
+    @Convert(converter = edu.pe.residencias.model.converter.HabitacionEstadoConverter.class)
     @Column(name = "estado")
-    private String estado;
+    private edu.pe.residencias.model.enums.HabitacionEstado estado;
 
     @Column(name = "destacado", nullable = false)
     private Boolean destacado = false;

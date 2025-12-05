@@ -180,7 +180,7 @@ public class ResidenciaServiceImpl implements ResidenciaService {
         // precio desde: min precio mensual among available habitaciones
         java.math.BigDecimal precioDesde = null;
         try {
-            java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaIdAndEstado(id, "disponible");
+                java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaIdAndEstado(id, edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE);
             if (hs == null || hs.isEmpty()) {
                 // fallback to any habitaciones
                 hs = habitacionRepository.findByResidenciaId(id);
@@ -199,7 +199,7 @@ public class ResidenciaServiceImpl implements ResidenciaService {
         int total = 0;
         int disponibles = 0;
         try { total = (int) habitacionRepository.countByResidenciaId(id); } catch (Exception ignored) {}
-        try { disponibles = (int) habitacionRepository.countByResidenciaIdAndEstado(id, "disponible"); } catch (Exception ignored) {}
+        try { disponibles = (int) habitacionRepository.countByResidenciaIdAndEstado(id, edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE); } catch (Exception ignored) {}
 
         edu.pe.residencias.model.dto.ResidenciaCardDTO dto = new edu.pe.residencias.model.dto.ResidenciaCardDTO();
         dto.setId(r.getId());

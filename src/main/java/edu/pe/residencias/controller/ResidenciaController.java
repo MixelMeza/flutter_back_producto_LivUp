@@ -81,6 +81,9 @@ public class ResidenciaController {
     @Autowired
     private edu.pe.residencias.service.ImagenResidenciaService imagenResidenciaService;
 
+    @Autowired
+    private edu.pe.residencias.repository.ImagenHabitacionRepository imagenHabitacionRepository;
+
     @GetMapping
     public ResponseEntity<List<Residencia>> readAll() {
         try {
@@ -483,6 +486,54 @@ public class ResidenciaController {
             return new ResponseEntity<>(dto, HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Error getting residencia card for id={}", id, e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/{id}/habitaciones/preview")
+    public ResponseEntity<?> getHabitacionesPreview(@PathVariable("id") Long id) {
+        try {
+            // verify residencia exists
+            var residenciaOpt = residenciaRepository.findById(id);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaId(id);
+            if (hs == null) hs = java.util.Collections.emptyList();
+
+            java.util.List<edu.pe.residencias.model.dto.HabitacionPreviewDTO> out = new java.util.ArrayList<>();
+            for (var h : hs) {
+                String img = null;
+                try {
+                    java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+                    if (imgs != null && !imgs.isEmpty()) {
+                        // pick orden == 1 first, otherwise smallest orden
+                        edu.pe.residencias.model.entity.ImagenHabitacion chosen = null;
+                        for (var im : imgs) {
+                            if (im == null) continue;
+                            if (im.getOrden() != null && im.getOrden() == 1) { chosen = im; break; }
+                            if (chosen == null) { chosen = im; continue; }
+                            int oChosen = chosen.getOrden() == null ? Integer.MAX_VALUE : chosen.getOrden();
+                            int oCur = im.getOrden() == null ? Integer.MAX_VALUE : im.getOrden();
+                            if (oCur < oChosen) chosen = im;
+                        }
+                        if (chosen != null) img = chosen.getUrl();
+                    }
+                } catch (Exception ignored) {}
+
+                String estadoLabel = null;
+                try {
+                    if (h.getEstado() != null) estadoLabel = h.getEstado().getLabel();
+                } catch (Exception ignored) {}
+
+                edu.pe.residencias.model.dto.HabitacionPreviewDTO dto = new edu.pe.residencias.model.dto.HabitacionPreviewDTO(
+                    h.getId(), h.getNombre(), h.getPrecioMensual(), estadoLabel, img
+                );
+                out.add(dto);
+            }
+
+            return new ResponseEntity<>(out, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error in /api/residencias/{id}/habitaciones/preview", e);
             return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

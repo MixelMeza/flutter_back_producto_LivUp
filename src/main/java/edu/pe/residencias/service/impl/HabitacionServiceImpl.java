@@ -23,8 +23,8 @@ public class HabitacionServiceImpl implements HabitacionService {
     @Override
     public Habitacion create(Habitacion habitacion) {
         // Todas las habitaciones se crean en estado disponible
-        if (habitacion.getEstado() == null || habitacion.getEstado().isEmpty()) {
-            habitacion.setEstado("disponible");
+        if (habitacion.getEstado() == null) {
+            habitacion.setEstado(edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE);
         }
         Habitacion h = repository.save(habitacion);
         // Recalculate cantidad_habitaciones for the residencia
