@@ -42,7 +42,6 @@ import edu.pe.residencias.model.entity.ImagenResidencia;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 import java.util.ArrayList;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestPart;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.multipart.MultipartFile;
@@ -207,7 +206,7 @@ public class ResidenciaController {
     }
 
     // POST (multipart/form-data) - create habitacion with payload (JSON) and files
-    @PostMapping(path = "/{residenciaId}/habitaciones", consumes = {MediaType.MULTIPART_FORM_DATA_VALUE})
+    @PostMapping(path = "/{residenciaId}/habitaciones")
     public ResponseEntity<?> createHabitacionMultipart(HttpServletRequest request,
                                                        @PathVariable("residenciaId") Long residenciaId,
                                                        @RequestPart("payload") String payload,
