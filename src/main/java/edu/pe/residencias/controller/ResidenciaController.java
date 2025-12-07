@@ -37,8 +37,6 @@ import edu.pe.residencias.model.dto.SimpleResidenciaDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import edu.pe.residencias.model.dto.UbicacionDTO;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import edu.pe.residencias.model.dto.ResidenciaAdminDTO;
 import edu.pe.residencias.model.entity.ImagenResidencia;
 import java.util.stream.Collectors;
@@ -48,6 +46,7 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestPart;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.Map;
 
 
 @RestController
@@ -88,6 +87,9 @@ public class ResidenciaController {
     private edu.pe.residencias.service.ImagenHabitacionService imagenHabitacionService;
     @Autowired
     private edu.pe.residencias.service.CloudinaryService cloudinaryService;
+
+    @Autowired
+    private edu.pe.residencias.service.HabitacionService habitacionService;
 
     @Autowired
     private edu.pe.residencias.repository.ImagenHabitacionRepository imagenHabitacionRepository;
@@ -222,7 +224,8 @@ public class ResidenciaController {
 
                 int index = max + 1;
                 for (MultipartFile file: files) {
-                    Map result = cloudinaryService.uploadImage(file, "habitaciones");
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> result = (Map<String, Object>) cloudinaryService.uploadImage(file, "habitaciones");
                     String url = (String) result.get("secure_url");
                     edu.pe.residencias.model.entity.ImagenHabitacion img = new edu.pe.residencias.model.entity.ImagenHabitacion();
                     // set habitacion reference
