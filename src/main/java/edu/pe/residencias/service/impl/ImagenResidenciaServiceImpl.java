@@ -69,7 +69,7 @@ public class ImagenResidenciaServiceImpl implements ImagenResidenciaService {
         java.util.Set<String> incomingSet = new java.util.HashSet<>();
         java.util.List<ImagenResidencia> result = new java.util.ArrayList<>();
 
-        int index = 0;
+        int index = 1; // use 1-based ordering so first image has orden = 1
         for (String url : urls == null ? java.util.List.<String>of() : urls) {
             incomingSet.add(url);
             ImagenResidencia im = mapByUrl.get(url);

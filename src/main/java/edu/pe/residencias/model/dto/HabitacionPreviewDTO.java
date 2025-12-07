@@ -8,6 +8,9 @@ public class HabitacionPreviewDTO {
     private BigDecimal precio;
     private String estado;
     private String imagen_principal;
+    private Integer piso;
+    private Integer capacidad;
+    private Boolean destacado;
 
     public HabitacionPreviewDTO() {}
 
@@ -18,6 +21,13 @@ public class HabitacionPreviewDTO {
         this.estado = estado;
         this.imagen_principal = imagen_principal;
     }
+
+    public Integer getPiso() { return piso; }
+    public void setPiso(Integer piso) { this.piso = piso; }
+    public Integer getCapacidad() { return capacidad; }
+    public void setCapacidad(Integer capacidad) { this.capacidad = capacidad; }
+    public Boolean getDestacado() { return destacado; }
+    public void setDestacado(Boolean destacado) { this.destacado = destacado; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

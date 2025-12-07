@@ -63,7 +63,22 @@ public class FileUploadController {
             ImagenResidencia img = new ImagenResidencia();
             img.setResidencia(residenciaOpt.get());
             img.setUrl(url);
-            if (orden != null) img.setOrden(orden);
+            if (orden != null) {
+                img.setOrden(orden);
+            } else {
+                // determine next orden (1-based)
+                int max = 0;
+                try {
+                    var imgs = residenciaOpt.get().getImagenesResidencia();
+                    if (imgs != null) {
+                        for (var im : imgs) {
+                            if (im == null || im.getOrden() == null) continue;
+                            if (im.getOrden() > max) max = im.getOrden();
+                        }
+                    }
+                } catch (Exception ignore) {}
+                img.setOrden(max + 1);
+            }
             ImagenResidencia created = imagenResidenciaService.create(img);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -88,12 +103,61 @@ public class FileUploadController {
             ImagenHabitacion img = new ImagenHabitacion();
             img.setHabitacion(habitacionOpt.get());
             img.setUrl(url);
-            if (orden != null) img.setOrden(orden);
+            if (orden != null) {
+                img.setOrden(orden);
+            } else {
+                int max = 0;
+                try {
+                    var imgs = habitacionOpt.get().getImagenesHabitacion();
+                    if (imgs != null) {
+                        for (var im : imgs) {
+                            if (im == null || im.getOrden() == null) continue;
+                            if (im.getOrden() > max) max = im.getOrden();
+                        }
+                    }
+                } catch (Exception ignore) {}
+                img.setOrden(max + 1);
+            }
             ImagenHabitacion created = imagenHabitacionService.create(img);
 
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Upload failed: " + e.getMessage());
+        }
+    }
+
+    // Create ImagenHabitacion record from an existing URL (no upload)
+    @PostMapping("/habitacion/{habitacionId}/imagen/url")
+    public ResponseEntity<?> createHabitacionImagenFromUrl(@PathVariable Long habitacionId,
+                                                           @RequestParam("url") String url,
+                                                           @RequestParam(value = "orden", required = false) Integer orden) {
+        try {
+            var habitacionOpt = habitacionRepository.findById(habitacionId);
+            if (habitacionOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Habitacion no encontrada");
+
+            ImagenHabitacion img = new ImagenHabitacion();
+            img.setHabitacion(habitacionOpt.get());
+            img.setUrl(url);
+            if (orden != null) {
+                img.setOrden(orden);
+            } else {
+                int max = 0;
+                try {
+                    var imgs = habitacionOpt.get().getImagenesHabitacion();
+                    if (imgs != null) {
+                        for (var im : imgs) {
+                            if (im == null || im.getOrden() == null) continue;
+                            if (im.getOrden() > max) max = im.getOrden();
+                        }
+                    }
+                } catch (Exception ignore) {}
+                img.setOrden(max + 1);
+            }
+            ImagenHabitacion created = imagenHabitacionService.create(img);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Create failed: " + e.getMessage());
         }
     }
 

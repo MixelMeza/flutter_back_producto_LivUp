@@ -84,6 +84,9 @@ public class Habitacion {
     @Column(name = "luz")
     private Boolean luz;
 
+    @Column(name = "terma")
+    private Boolean terma;
+
     @Column(name = "precio_mensual", precision = 10, scale = 2)
     private BigDecimal precioMensual;
 

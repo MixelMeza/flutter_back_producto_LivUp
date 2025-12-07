@@ -528,12 +528,75 @@ public class ResidenciaController {
                 edu.pe.residencias.model.dto.HabitacionPreviewDTO dto = new edu.pe.residencias.model.dto.HabitacionPreviewDTO(
                     h.getId(), h.getNombre(), h.getPrecioMensual(), estadoLabel, img
                 );
+                try {
+                    dto.setPiso(h.getPiso());
+                } catch (Exception ignored) {}
+                try {
+                    dto.setCapacidad(h.getCapacidad());
+                } catch (Exception ignored) {}
+                try {
+                    dto.setDestacado(h.getDestacado());
+                } catch (Exception ignored) {}
                 out.add(dto);
             }
 
             return new ResponseEntity<>(out, HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Error in /api/residencias/{id}/habitaciones/preview", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/{id}/habitaciones")
+    public ResponseEntity<?> getHabitacionesFullByResidencia(@PathVariable("id") Long id) {
+        try {
+            var residenciaOpt = residenciaRepository.findById(id);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaId(id);
+            if (hs == null) hs = java.util.Collections.emptyList();
+
+            java.util.List<edu.pe.residencias.model.dto.HabitacionFullDTO> out = new java.util.ArrayList<>();
+            for (var h : hs) {
+                edu.pe.residencias.model.dto.HabitacionFullDTO dto = new edu.pe.residencias.model.dto.HabitacionFullDTO();
+                dto.setId(h.getId());
+                dto.setCodigoHabitacion(h.getCodigoHabitacion());
+                dto.setNombre(h.getNombre());
+                dto.setDepartamento(h.getDepartamento());
+                dto.setBanoPrivado(h.getBanoPrivado());
+                dto.setWifi(h.getWifi());
+                dto.setAmueblado(h.getAmueblado());
+                dto.setPiso(h.getPiso());
+                dto.setCapacidad(h.getCapacidad());
+                dto.setDescripcion(h.getDescripcion());
+                dto.setPermitir_mascotas(h.getPermitir_mascotas());
+                dto.setAgua(h.getAgua());
+                dto.setLuz(h.getLuz());
+                dto.setPrecioMensual(h.getPrecioMensual());
+                dto.setEstado(h.getEstado() == null ? null : (h.getEstado().name()));
+                dto.setTerma(h.getTerma());
+                dto.setDestacado(h.getDestacado());
+
+                java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+                java.util.List<String> imgDtos = new java.util.ArrayList<>();
+                if (imgs != null) {
+                    imgs.sort((a,b) -> {
+                        int oa = a == null || a.getOrden() == null ? Integer.MAX_VALUE : a.getOrden();
+                        int ob = b == null || b.getOrden() == null ? Integer.MAX_VALUE : b.getOrden();
+                        return Integer.compare(oa, ob);
+                    });
+                    for (var im : imgs) {
+                        if (im == null) continue;
+                        imgDtos.add(im.getUrl());
+                    }
+                }
+                dto.setImagenes(imgDtos);
+                out.add(dto);
+            }
+
+            return new ResponseEntity<>(out, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error in /api/residencias/{id}/habitaciones (full)", e);
             return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

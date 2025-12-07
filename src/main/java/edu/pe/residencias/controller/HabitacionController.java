@@ -20,6 +20,10 @@ import edu.pe.residencias.model.entity.Habitacion;
 import edu.pe.residencias.model.entity.Residencia;
 import edu.pe.residencias.service.HabitacionService;
 import edu.pe.residencias.repository.ResidenciaRepository;
+import edu.pe.residencias.repository.ImagenHabitacionRepository;
+import edu.pe.residencias.model.dto.HabitacionFullDTO;
+import jakarta.servlet.http.HttpServletRequest;
+import edu.pe.residencias.model.dto.ImagenesUpdateRequest;
 
 @RestController
 @RequestMapping("/api/habitaciones")
@@ -33,6 +37,18 @@ public class HabitacionController {
     
     @Autowired
     private ResidenciaRepository residenciaRepository;
+
+    @Autowired
+    private ImagenHabitacionRepository imagenHabitacionRepository;
+
+    @Autowired
+    private edu.pe.residencias.service.ImagenHabitacionService imagenHabitacionService;
+
+    @Autowired
+    private edu.pe.residencias.security.JwtUtil jwtUtil;
+
+    @Autowired
+    private edu.pe.residencias.repository.UsuarioRepository usuarioRepository;
 
     @GetMapping
     public ResponseEntity<List<Habitacion>> readAll() {
@@ -58,10 +74,47 @@ public class HabitacionController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Habitacion> getHabitacionId(@PathVariable("id") Long id) {
+    public ResponseEntity<?> getHabitacionId(@PathVariable("id") Long id) {
         try {
-            Habitacion h = habitacionService.read(id).get();
-            return new ResponseEntity<>(h, HttpStatus.OK);
+            Optional<Habitacion> opt = habitacionService.read(id);
+            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            Habitacion h = opt.get();
+
+            HabitacionFullDTO dto = new HabitacionFullDTO();
+            dto.setId(h.getId());
+            dto.setCodigoHabitacion(h.getCodigoHabitacion());
+            dto.setNombre(h.getNombre());
+            dto.setDepartamento(h.getDepartamento());
+            dto.setBanoPrivado(h.getBanoPrivado());
+            dto.setWifi(h.getWifi());
+            dto.setAmueblado(h.getAmueblado());
+            dto.setPiso(h.getPiso());
+            dto.setCapacidad(h.getCapacidad());
+            dto.setDescripcion(h.getDescripcion());
+            dto.setPermitir_mascotas(h.getPermitir_mascotas());
+            dto.setAgua(h.getAgua());
+            dto.setLuz(h.getLuz());
+            dto.setTerma(h.getTerma());
+            dto.setPrecioMensual(h.getPrecioMensual());
+            dto.setEstado(h.getEstado() == null ? null : h.getEstado().name());
+            dto.setDestacado(h.getDestacado());
+
+            java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+            java.util.List<String> imgUrls = new java.util.ArrayList<>();
+            if (imgs != null) {
+                imgs.sort((a,b) -> {
+                    int oa = a == null || a.getOrden() == null ? Integer.MAX_VALUE : a.getOrden();
+                    int ob = b == null || b.getOrden() == null ? Integer.MAX_VALUE : b.getOrden();
+                    return Integer.compare(oa, ob);
+                });
+                for (var im : imgs) {
+                    if (im == null) continue;
+                    imgUrls.add(im.getUrl());
+                }
+            }
+            dto.setImagenes(imgUrls);
+
+            return new ResponseEntity<>(dto, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -91,13 +144,115 @@ public class HabitacionController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateHabitacion(@PathVariable("id") Long id, @Valid @RequestBody Habitacion habitacion) {
-        Optional<Habitacion> h = habitacionService.read(id);
-        if (h.isEmpty()) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        } else {
-            Habitacion updatedHabitacion = habitacionService.update(habitacion);
-            return new ResponseEntity<>(updatedHabitacion, HttpStatus.OK);
+    public ResponseEntity<?> updateHabitacion(@PathVariable("id") Long id, @RequestBody edu.pe.residencias.model.dto.HabitacionUpdateDTO update) {
+        try {
+            Optional<Habitacion> opt = habitacionService.read(id);
+            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            Habitacion existing = opt.get();
+
+            // Apply partial updates: only non-null fields from DTO overwrite entity
+            if (update.getCodigoHabitacion() != null) existing.setCodigoHabitacion(update.getCodigoHabitacion());
+            if (update.getNombre() != null) existing.setNombre(update.getNombre());
+            if (update.getDepartamento() != null) existing.setDepartamento(update.getDepartamento());
+            if (update.getBanoPrivado() != null) existing.setBanoPrivado(update.getBanoPrivado());
+            if (update.getWifi() != null) existing.setWifi(update.getWifi());
+            if (update.getAmueblado() != null) existing.setAmueblado(update.getAmueblado());
+            if (update.getPiso() != null) existing.setPiso(update.getPiso());
+            if (update.getCapacidad() != null) existing.setCapacidad(update.getCapacidad());
+            if (update.getDescripcion() != null) existing.setDescripcion(update.getDescripcion());
+            if (update.getPermitir_mascotas() != null) existing.setPermitir_mascotas(update.getPermitir_mascotas());
+            if (update.getAgua() != null) existing.setAgua(update.getAgua());
+            if (update.getLuz() != null) existing.setLuz(update.getLuz());
+            if (update.getPrecioMensual() != null) existing.setPrecioMensual(update.getPrecioMensual());
+            if (update.getEstado() != null) {
+                try {
+                    existing.setEstado(edu.pe.residencias.model.enums.HabitacionEstado.fromString(update.getEstado()));
+                } catch (IllegalArgumentException ex) {
+                    return ResponseEntity.badRequest().body("estado inválido");
+                }
+            }
+            if (update.getDestacado() != null) existing.setDestacado(update.getDestacado());
+            if (update.getTerma() != null) existing.setTerma(update.getTerma());
+
+            Habitacion saved = habitacionService.update(existing);
+
+            // Build HabitacionFullDTO to return same shape as GET /residencias/{id}/habitaciones
+            HabitacionFullDTO dto = new HabitacionFullDTO();
+            dto.setId(saved.getId());
+            dto.setCodigoHabitacion(saved.getCodigoHabitacion());
+            dto.setNombre(saved.getNombre());
+            dto.setDepartamento(saved.getDepartamento());
+            dto.setBanoPrivado(saved.getBanoPrivado());
+            dto.setWifi(saved.getWifi());
+            dto.setAmueblado(saved.getAmueblado());
+            dto.setPiso(saved.getPiso());
+            dto.setCapacidad(saved.getCapacidad());
+            dto.setDescripcion(saved.getDescripcion());
+            dto.setPermitir_mascotas(saved.getPermitir_mascotas());
+            dto.setAgua(saved.getAgua());
+            dto.setLuz(saved.getLuz());
+            dto.setTerma(saved.getTerma());
+            dto.setPrecioMensual(saved.getPrecioMensual());
+            dto.setEstado(saved.getEstado() == null ? null : saved.getEstado().name());
+            dto.setDestacado(saved.getDestacado());
+
+            // images: ordered by orden asc, return list of URLs
+            java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(saved.getId());
+            java.util.List<String> imgUrls = new java.util.ArrayList<>();
+            if (imgs != null) {
+                imgs.sort((a,b) -> {
+                    int oa = a == null || a.getOrden() == null ? Integer.MAX_VALUE : a.getOrden();
+                    int ob = b == null || b.getOrden() == null ? Integer.MAX_VALUE : b.getOrden();
+                    return Integer.compare(oa, ob);
+                });
+                for (var im : imgs) {
+                    if (im == null) continue;
+                    imgUrls.add(im.getUrl());
+                }
+            }
+            dto.setImagenes(imgUrls);
+
+            return new ResponseEntity<>(dto, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Error interno al actualizar habitación", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/{id}/imagenes")
+    public ResponseEntity<?> updateHabitacionImagenes(HttpServletRequest request, @PathVariable("id") Long id, @RequestBody ImagenesUpdateRequest body) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            }
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            }
+            var usuario = usuarioOpt.get();
+
+            var habitacionOpt = habitacionService.read(id);
+            if (habitacionOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var habitacion = habitacionOpt.get();
+            var residencia = habitacion.getResidencia();
+            if (residencia == null) return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+            if (residencia.getUsuario() == null || !residencia.getUsuario().getId().equals(usuario.getId())) {
+                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            }
+
+            java.util.List<String> urls = body == null || body.getImagenes() == null ? java.util.List.of() : body.getImagenes();
+            java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> updated = imagenHabitacionService.updateListForHabitacion(id, urls);
+            return new ResponseEntity<>(updated, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            return new ResponseEntity<>("Error interno al actualizar imágenes", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
     
