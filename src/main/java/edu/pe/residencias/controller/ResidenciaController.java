@@ -197,29 +197,29 @@ public class ResidenciaController {
         return false;
     }
 
-    // Unified POST endpoint that accepts either JSON or multipart (payload + files)
-    @PostMapping("/{residenciaId}/habitaciones")
-    public ResponseEntity<?> createHabitacionUnified(HttpServletRequest request,
-                                                    @PathVariable("residenciaId") Long residenciaId,
-                                                    @RequestPart(value = "payload", required = false) String payload,
-                                                    @RequestPart(value = "files", required = false) List<MultipartFile> files,
-                                                    @RequestBody(required = false) edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
-        try {
-            // If body is null, try to parse payload (multipart case)
-            if (body == null) {
-                if (payload == null || payload.isBlank()) {
-                    return ResponseEntity.badRequest().body("Request body or payload is required");
-                }
-                ObjectMapper om = new ObjectMapper();
-                body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
-            }
+    // POST (application/json) - create habitacion with JSON body
+    @PostMapping(path = "/{residenciaId}/habitaciones", consumes = {"application/json"})
+    public ResponseEntity<?> createHabitacionJson(HttpServletRequest request,
+                                                 @PathVariable("residenciaId") Long residenciaId,
+                                                 @RequestBody edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
+        // delegate to helper
+        return createHabitacionHelper(request, residenciaId, body);
+    }
 
-            // create entity (auth and owner/admin check inside helper)
+    // POST (multipart/form-data) - create habitacion with payload (JSON) and files
+    @PostMapping(path = "/{residenciaId}/habitaciones", consumes = {MediaType.MULTIPART_FORM_DATA_VALUE})
+    public ResponseEntity<?> createHabitacionMultipart(HttpServletRequest request,
+                                                       @PathVariable("residenciaId") Long residenciaId,
+                                                       @RequestPart("payload") String payload,
+                                                       @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+        try {
+            ObjectMapper om = new ObjectMapper();
+            edu.pe.residencias.model.dto.HabitacionUpdateDTO body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
             ResponseEntity<?> createdResp = createHabitacionHelper(request, residenciaId, body);
             if (!createdResp.getStatusCode().is2xxSuccessful()) return createdResp;
             edu.pe.residencias.model.dto.HabitacionFullDTO createdDto = (edu.pe.residencias.model.dto.HabitacionFullDTO) createdResp.getBody();
 
-            // handle file uploads if provided
+            // upload files
             if (files != null && !files.isEmpty()) {
                 int max = 0;
                 try {
@@ -242,7 +242,7 @@ public class ResidenciaController {
                 }
             }
 
-            // return full DTO with images
+            // build full DTO and return
             var habOpt = habitacionRepository.findById(createdDto.getId());
             if (habOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             var hab = habOpt.get();
@@ -276,7 +276,7 @@ public class ResidenciaController {
         } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             return ResponseEntity.badRequest().body("payload JSON inválido");
         } catch (Exception e) {
-            logger.error("Error creating habitacion (unified endpoint)", e);
+            logger.error("Error creating habitacion (multipart)", e);
             return new ResponseEntity<>("Error interno al crear habitación", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
