@@ -42,10 +42,6 @@ import edu.pe.residencias.model.entity.ImagenResidencia;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 import java.util.ArrayList;
-import org.springframework.web.bind.annotation.RequestPart;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.web.multipart.MultipartFile;
-import java.util.Map;
 
 
 @RestController
@@ -205,80 +201,7 @@ public class ResidenciaController {
         return createHabitacionHelper(request, residenciaId, body);
     }
 
-    // POST (multipart/form-data) - create habitacion with payload (JSON) and files
-    @PostMapping(path = "/{residenciaId}/habitaciones")
-    public ResponseEntity<?> createHabitacionMultipart(HttpServletRequest request,
-                                                       @PathVariable("residenciaId") Long residenciaId,
-                                                       @RequestPart("payload") String payload,
-                                                       @RequestPart(value = "files", required = false) List<MultipartFile> files) {
-        try {
-            ObjectMapper om = new ObjectMapper();
-            edu.pe.residencias.model.dto.HabitacionUpdateDTO body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
-            ResponseEntity<?> createdResp = createHabitacionHelper(request, residenciaId, body);
-            if (!createdResp.getStatusCode().is2xxSuccessful()) return createdResp;
-            edu.pe.residencias.model.dto.HabitacionFullDTO createdDto = (edu.pe.residencias.model.dto.HabitacionFullDTO) createdResp.getBody();
-
-            // upload files
-            if (files != null && !files.isEmpty()) {
-                int max = 0;
-                try {
-                    var imgs = imagenHabitacionRepository.findByHabitacionId(createdDto.getId());
-                    if (imgs != null) for (var im: imgs) if (im != null && im.getOrden() != null && im.getOrden() > max) max = im.getOrden();
-                } catch (Exception ignore) {}
-
-                int index = max + 1;
-                for (MultipartFile file: files) {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> result = (Map<String, Object>) cloudinaryService.uploadImage(file, "habitaciones");
-                    String url = (String) result.get("secure_url");
-                    edu.pe.residencias.model.entity.ImagenHabitacion img = new edu.pe.residencias.model.entity.ImagenHabitacion();
-                    edu.pe.residencias.model.entity.Habitacion ref = habitacionRepository.findById(createdDto.getId()).orElse(null);
-                    img.setHabitacion(ref);
-                    img.setUrl(url);
-                    img.setOrden(index);
-                    imagenHabitacionService.create(img);
-                    index++;
-                }
-            }
-
-            // build full DTO and return
-            var habOpt = habitacionRepository.findById(createdDto.getId());
-            if (habOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            var hab = habOpt.get();
-            edu.pe.residencias.model.dto.HabitacionFullDTO full = new edu.pe.residencias.model.dto.HabitacionFullDTO();
-            full.setId(hab.getId());
-            full.setCodigoHabitacion(hab.getCodigoHabitacion());
-            full.setNombre(hab.getNombre());
-            full.setDepartamento(hab.getDepartamento());
-            full.setBanoPrivado(hab.getBanoPrivado());
-            full.setWifi(hab.getWifi());
-            full.setAmueblado(hab.getAmueblado());
-            full.setPiso(hab.getPiso());
-            full.setCapacidad(hab.getCapacidad());
-            full.setDescripcion(hab.getDescripcion());
-            full.setPermitir_mascotas(hab.getPermitir_mascotas());
-            full.setAgua(hab.getAgua());
-            full.setLuz(hab.getLuz());
-            full.setTerma(hab.getTerma());
-            full.setPrecioMensual(hab.getPrecioMensual());
-            full.setEstado(hab.getEstado() == null ? null : hab.getEstado().name());
-            full.setDestacado(hab.getDestacado());
-            var images = imagenHabitacionRepository.findByHabitacionId(hab.getId());
-            if (images != null) {
-                images.sort(Comparator.comparingInt(i -> i.getOrden() == null ? Integer.MAX_VALUE : i.getOrden()));
-                full.setImagenes(images.stream().map(im -> im.getUrl()).collect(Collectors.toList()));
-            } else {
-                full.setImagenes(java.util.List.of());
-            }
-
-            return new ResponseEntity<>(full, HttpStatus.CREATED);
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            return ResponseEntity.badRequest().body("payload JSON inválido");
-        } catch (Exception e) {
-            logger.error("Error creating habitacion (multipart)", e);
-            return new ResponseEntity<>("Error interno al crear habitación", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
+    // (multipart upload removed) Only JSON creation is supported for habitaciones now.
 
     @GetMapping("/map")
     public ResponseEntity<?> getResidenciasForMap() {
