@@ -107,13 +107,12 @@ public class ResidenciaController {
         }
     }
 
-    // Create habitacion (JSON) under a residencia. Requires owner token.
-    @PostMapping("/{residenciaId}/habitaciones")
-    public ResponseEntity<?> createHabitacionUnderResidencia(HttpServletRequest request,
-                                                            @PathVariable("residenciaId") Long residenciaId,
-                                                            @RequestBody edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
+    // Helper: create habitacion entity from DTO after auth/ownership checks
+    private ResponseEntity<?> createHabitacionHelper(HttpServletRequest request,
+                                                    Long residenciaId,
+                                                    edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
         try {
-            // auth + owner check
+            // auth + owner/admin check
             String authHeader = request.getHeader("Authorization");
             if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
@@ -198,24 +197,30 @@ public class ResidenciaController {
         return false;
     }
 
-    // Create habitacion with files (multipart). payload=JSON part, files optional.
-    @PostMapping(value = "/{residenciaId}/habitaciones", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
-    public ResponseEntity<?> createHabitacionWithFiles(HttpServletRequest request,
-                                                      @PathVariable("residenciaId") Long residenciaId,
-                                                      @RequestPart("payload") String payload,
-                                                      @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+    // Unified POST endpoint that accepts either JSON or multipart (payload + files)
+    @PostMapping("/{residenciaId}/habitaciones")
+    public ResponseEntity<?> createHabitacionUnified(HttpServletRequest request,
+                                                    @PathVariable("residenciaId") Long residenciaId,
+                                                    @RequestPart(value = "payload", required = false) String payload,
+                                                    @RequestPart(value = "files", required = false) List<MultipartFile> files,
+                                                    @RequestBody(required = false) edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
         try {
-            ObjectMapper om = new ObjectMapper();
-            edu.pe.residencias.model.dto.HabitacionUpdateDTO body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
-            // reuse JSON flow for auth + creation
-            ResponseEntity<?> createdResp = createHabitacionUnderResidencia(request, residenciaId, body);
+            // If body is null, try to parse payload (multipart case)
+            if (body == null) {
+                if (payload == null || payload.isBlank()) {
+                    return ResponseEntity.badRequest().body("Request body or payload is required");
+                }
+                ObjectMapper om = new ObjectMapper();
+                body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
+            }
+
+            // create entity (auth and owner/admin check inside helper)
+            ResponseEntity<?> createdResp = createHabitacionHelper(request, residenciaId, body);
             if (!createdResp.getStatusCode().is2xxSuccessful()) return createdResp;
-            // extract created DTO
             edu.pe.residencias.model.dto.HabitacionFullDTO createdDto = (edu.pe.residencias.model.dto.HabitacionFullDTO) createdResp.getBody();
 
-            // upload files if any
+            // handle file uploads if provided
             if (files != null && !files.isEmpty()) {
-                // determine starting orden (max existing)
                 int max = 0;
                 try {
                     var imgs = imagenHabitacionRepository.findByHabitacionId(createdDto.getId());
@@ -228,7 +233,6 @@ public class ResidenciaController {
                     Map<String, Object> result = (Map<String, Object>) cloudinaryService.uploadImage(file, "habitaciones");
                     String url = (String) result.get("secure_url");
                     edu.pe.residencias.model.entity.ImagenHabitacion img = new edu.pe.residencias.model.entity.ImagenHabitacion();
-                    // set habitacion reference
                     edu.pe.residencias.model.entity.Habitacion ref = habitacionRepository.findById(createdDto.getId()).orElse(null);
                     img.setHabitacion(ref);
                     img.setUrl(url);
@@ -238,7 +242,7 @@ public class ResidenciaController {
                 }
             }
 
-            // build and return full DTO with images
+            // return full DTO with images
             var habOpt = habitacionRepository.findById(createdDto.getId());
             if (habOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             var hab = habOpt.get();
@@ -260,7 +264,6 @@ public class ResidenciaController {
             full.setPrecioMensual(hab.getPrecioMensual());
             full.setEstado(hab.getEstado() == null ? null : hab.getEstado().name());
             full.setDestacado(hab.getDestacado());
-            // images
             var images = imagenHabitacionRepository.findByHabitacionId(hab.getId());
             if (images != null) {
                 images.sort(Comparator.comparingInt(i -> i.getOrden() == null ? Integer.MAX_VALUE : i.getOrden()));
@@ -273,8 +276,8 @@ public class ResidenciaController {
         } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
             return ResponseEntity.badRequest().body("payload JSON inválido");
         } catch (Exception e) {
-            logger.error("Error creating habitacion with files", e);
-            return new ResponseEntity<>("Error interno al crear habitación con archivos", HttpStatus.INTERNAL_SERVER_ERROR);
+            logger.error("Error creating habitacion (unified endpoint)", e);
+            return new ResponseEntity<>("Error interno al crear habitación", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
