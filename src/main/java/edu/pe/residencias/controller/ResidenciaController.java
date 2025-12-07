@@ -44,6 +44,10 @@ import edu.pe.residencias.model.entity.ImagenResidencia;
 import java.util.stream.Collectors;
 import java.util.Comparator;
 import java.util.ArrayList;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestPart;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.web.multipart.MultipartFile;
 
 
 @RestController
@@ -80,6 +84,10 @@ public class ResidenciaController {
 
     @Autowired
     private edu.pe.residencias.service.ImagenResidenciaService imagenResidenciaService;
+    @Autowired
+    private edu.pe.residencias.service.ImagenHabitacionService imagenHabitacionService;
+    @Autowired
+    private edu.pe.residencias.service.CloudinaryService cloudinaryService;
 
     @Autowired
     private edu.pe.residencias.repository.ImagenHabitacionRepository imagenHabitacionRepository;
@@ -94,6 +102,176 @@ public class ResidenciaController {
             return new ResponseEntity<>(residencias, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Create habitacion (JSON) under a residencia. Requires owner token.
+    @PostMapping("/{residenciaId}/habitaciones")
+    public ResponseEntity<?> createHabitacionUnderResidencia(HttpServletRequest request,
+                                                            @PathVariable("residenciaId") Long residenciaId,
+                                                            @RequestBody edu.pe.residencias.model.dto.HabitacionUpdateDTO body) {
+        try {
+            // auth + owner check
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(residenciaId);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) {
+                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            }
+
+            // build entity
+            edu.pe.residencias.model.entity.Habitacion h = new edu.pe.residencias.model.entity.Habitacion();
+            h.setResidencia(residencia);
+            if (body.getCodigoHabitacion() != null) h.setCodigoHabitacion(body.getCodigoHabitacion());
+            if (body.getNombre() != null) h.setNombre(body.getNombre());
+            if (body.getDepartamento() != null) h.setDepartamento(body.getDepartamento());
+            if (body.getBanoPrivado() != null) h.setBanoPrivado(body.getBanoPrivado());
+            if (body.getWifi() != null) h.setWifi(body.getWifi());
+            if (body.getAmueblado() != null) h.setAmueblado(body.getAmueblado());
+            if (body.getPiso() != null) h.setPiso(body.getPiso());
+            if (body.getCapacidad() != null) h.setCapacidad(body.getCapacidad());
+            if (body.getDescripcion() != null) h.setDescripcion(body.getDescripcion());
+            if (body.getPermitir_mascotas() != null) h.setPermitir_mascotas(body.getPermitir_mascotas());
+            if (body.getAgua() != null) h.setAgua(body.getAgua());
+            if (body.getLuz() != null) h.setLuz(body.getLuz());
+            if (body.getPrecioMensual() != null) h.setPrecioMensual(body.getPrecioMensual());
+            if (body.getEstado() != null) {
+                try { h.setEstado(edu.pe.residencias.model.enums.HabitacionEstado.fromString(body.getEstado())); }
+                catch (IllegalArgumentException ex) { return ResponseEntity.badRequest().body("estado inválido"); }
+            }
+            if (body.getDestacado() != null) h.setDestacado(body.getDestacado());
+            if (body.getTerma() != null) h.setTerma(body.getTerma());
+
+            edu.pe.residencias.model.entity.Habitacion created = habitacionService.create(h);
+
+            // return HabitacionFullDTO
+            edu.pe.residencias.model.dto.HabitacionFullDTO dto = new edu.pe.residencias.model.dto.HabitacionFullDTO();
+            dto.setId(created.getId());
+            dto.setCodigoHabitacion(created.getCodigoHabitacion());
+            dto.setNombre(created.getNombre());
+            dto.setDepartamento(created.getDepartamento());
+            dto.setBanoPrivado(created.getBanoPrivado());
+            dto.setWifi(created.getWifi());
+            dto.setAmueblado(created.getAmueblado());
+            dto.setPiso(created.getPiso());
+            dto.setCapacidad(created.getCapacidad());
+            dto.setDescripcion(created.getDescripcion());
+            dto.setPermitir_mascotas(created.getPermitir_mascotas());
+            dto.setAgua(created.getAgua());
+            dto.setLuz(created.getLuz());
+            dto.setTerma(created.getTerma());
+            dto.setPrecioMensual(created.getPrecioMensual());
+            dto.setEstado(created.getEstado() == null ? null : created.getEstado().name());
+            dto.setDestacado(created.getDestacado());
+            dto.setImagenes(java.util.List.of());
+
+            return new ResponseEntity<>(dto, HttpStatus.CREATED);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error creating habitacion under residencia", e);
+            return new ResponseEntity<>("Error interno al crear habitación", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private boolean isOwnerOrAdmin(edu.pe.residencias.model.entity.Usuario usuario, edu.pe.residencias.model.entity.Residencia residencia) {
+        if (usuario == null) return false;
+        try {
+            if (usuario.getRol() != null && "admin".equalsIgnoreCase(usuario.getRol().getNombre())) return true;
+        } catch (Exception ignore) {}
+        if (residencia == null) return false;
+        if (residencia.getUsuario() != null && residencia.getUsuario().getId() != null && residencia.getUsuario().getId().equals(usuario.getId())) return true;
+        return false;
+    }
+
+    // Create habitacion with files (multipart). payload=JSON part, files optional.
+    @PostMapping(value = "/{residenciaId}/habitaciones", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<?> createHabitacionWithFiles(HttpServletRequest request,
+                                                      @PathVariable("residenciaId") Long residenciaId,
+                                                      @RequestPart("payload") String payload,
+                                                      @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+        try {
+            ObjectMapper om = new ObjectMapper();
+            edu.pe.residencias.model.dto.HabitacionUpdateDTO body = om.readValue(payload, edu.pe.residencias.model.dto.HabitacionUpdateDTO.class);
+            // reuse JSON flow for auth + creation
+            ResponseEntity<?> createdResp = createHabitacionUnderResidencia(request, residenciaId, body);
+            if (!createdResp.getStatusCode().is2xxSuccessful()) return createdResp;
+            // extract created DTO
+            edu.pe.residencias.model.dto.HabitacionFullDTO createdDto = (edu.pe.residencias.model.dto.HabitacionFullDTO) createdResp.getBody();
+
+            // upload files if any
+            if (files != null && !files.isEmpty()) {
+                // determine starting orden (max existing)
+                int max = 0;
+                try {
+                    var imgs = imagenHabitacionRepository.findByHabitacionId(createdDto.getId());
+                    if (imgs != null) for (var im: imgs) if (im != null && im.getOrden() != null && im.getOrden() > max) max = im.getOrden();
+                } catch (Exception ignore) {}
+
+                int index = max + 1;
+                for (MultipartFile file: files) {
+                    Map result = cloudinaryService.uploadImage(file, "habitaciones");
+                    String url = (String) result.get("secure_url");
+                    edu.pe.residencias.model.entity.ImagenHabitacion img = new edu.pe.residencias.model.entity.ImagenHabitacion();
+                    // set habitacion reference
+                    edu.pe.residencias.model.entity.Habitacion ref = habitacionRepository.findById(createdDto.getId()).orElse(null);
+                    img.setHabitacion(ref);
+                    img.setUrl(url);
+                    img.setOrden(index);
+                    imagenHabitacionService.create(img);
+                    index++;
+                }
+            }
+
+            // build and return full DTO with images
+            var habOpt = habitacionRepository.findById(createdDto.getId());
+            if (habOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var hab = habOpt.get();
+            edu.pe.residencias.model.dto.HabitacionFullDTO full = new edu.pe.residencias.model.dto.HabitacionFullDTO();
+            full.setId(hab.getId());
+            full.setCodigoHabitacion(hab.getCodigoHabitacion());
+            full.setNombre(hab.getNombre());
+            full.setDepartamento(hab.getDepartamento());
+            full.setBanoPrivado(hab.getBanoPrivado());
+            full.setWifi(hab.getWifi());
+            full.setAmueblado(hab.getAmueblado());
+            full.setPiso(hab.getPiso());
+            full.setCapacidad(hab.getCapacidad());
+            full.setDescripcion(hab.getDescripcion());
+            full.setPermitir_mascotas(hab.getPermitir_mascotas());
+            full.setAgua(hab.getAgua());
+            full.setLuz(hab.getLuz());
+            full.setTerma(hab.getTerma());
+            full.setPrecioMensual(hab.getPrecioMensual());
+            full.setEstado(hab.getEstado() == null ? null : hab.getEstado().name());
+            full.setDestacado(hab.getDestacado());
+            // images
+            var images = imagenHabitacionRepository.findByHabitacionId(hab.getId());
+            if (images != null) {
+                images.sort(Comparator.comparingInt(i -> i.getOrden() == null ? Integer.MAX_VALUE : i.getOrden()));
+                full.setImagenes(images.stream().map(im -> im.getUrl()).collect(Collectors.toList()));
+            } else {
+                full.setImagenes(java.util.List.of());
+            }
+
+            return new ResponseEntity<>(full, HttpStatus.CREATED);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+            return ResponseEntity.badRequest().body("payload JSON inválido");
+        } catch (Exception e) {
+            logger.error("Error creating habitacion with files", e);
+            return new ResponseEntity<>("Error interno al crear habitación con archivos", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -153,8 +331,8 @@ public class ResidenciaController {
             if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             var r = residenciaOpt.get();
 
-            // Check owner
-            if (r.getUsuario() == null || !r.getUsuario().getId().equals(usuario.getId())) {
+            // Check owner or admin
+            if (!isOwnerOrAdmin(usuario, r)) {
                 return new ResponseEntity<>(HttpStatus.FORBIDDEN);
             }
 
@@ -669,7 +847,7 @@ public class ResidenciaController {
                 var residenciaOpt = residenciaRepository.findByIdWithImagenes(id);
                 if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
                 var r = residenciaOpt.get();
-                if (r.getUsuario() == null || !r.getUsuario().getId().equals(usuario.getId())) {
+                if (!isOwnerOrAdmin(usuario, r)) {
                     return new ResponseEntity<>(HttpStatus.FORBIDDEN);
                 }
 

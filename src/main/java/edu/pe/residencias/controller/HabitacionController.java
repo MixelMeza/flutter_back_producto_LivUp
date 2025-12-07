@@ -242,7 +242,7 @@ public class HabitacionController {
             var habitacion = habitacionOpt.get();
             var residencia = habitacion.getResidencia();
             if (residencia == null) return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-            if (residencia.getUsuario() == null || !residencia.getUsuario().getId().equals(usuario.getId())) {
+            if (!isOwnerOrAdmin(usuario, residencia)) {
                 return new ResponseEntity<>(HttpStatus.FORBIDDEN);
             }
 
@@ -282,5 +282,15 @@ public class HabitacionController {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body("Error al buscar habitaciones: " + e.getMessage());
         }
+    }
+
+    private boolean isOwnerOrAdmin(edu.pe.residencias.model.entity.Usuario usuario, edu.pe.residencias.model.entity.Residencia residencia) {
+        if (usuario == null) return false;
+        try {
+            if (usuario.getRol() != null && "admin".equalsIgnoreCase(usuario.getRol().getNombre())) return true;
+        } catch (Exception ignore) {}
+        if (residencia == null) return false;
+        if (residencia.getUsuario() != null && residencia.getUsuario().getId() != null && residencia.getUsuario().getId().equals(usuario.getId())) return true;
+        return false;
     }
 }

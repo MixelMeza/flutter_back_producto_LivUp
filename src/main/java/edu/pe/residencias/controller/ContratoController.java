@@ -137,7 +137,7 @@ public class ContratoController {
             }
 
             var usuario = usuarioOpt.get();
-            if (!residencia.getUsuario().getId().equals(usuario.getId())) {
+            if (!isOwnerOrAdmin(usuario, residencia)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("No tienes permiso para ver estos contratos");
             }
 
@@ -156,6 +156,16 @@ public class ContratoController {
             e.printStackTrace();
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private boolean isOwnerOrAdmin(edu.pe.residencias.model.entity.Usuario usuario, edu.pe.residencias.model.entity.Residencia residencia) {
+        if (usuario == null) return false;
+        try {
+            if (usuario.getRol() != null && "admin".equalsIgnoreCase(usuario.getRol().getNombre())) return true;
+        } catch (Exception ignore) {}
+        if (residencia == null) return false;
+        if (residencia.getUsuario() != null && residencia.getUsuario().getId() != null && residencia.getUsuario().getId().equals(usuario.getId())) return true;
+        return false;
     }
 
     // Endpoint para obtener el contrato vigente de un inquilino por su id
