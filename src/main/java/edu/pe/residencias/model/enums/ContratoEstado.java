@@ -1,10 +1,12 @@
 package edu.pe.residencias.model.enums;
 
 public enum ContratoEstado {
+    PENDIENTE_INICIO("pendiente_inicio"),
     VIGENTE("vigente"),
-    FINALIZADO("finalizado"),
+    VENCIDO("vencido"),
     CANCELADO("cancelado"),
-    RENOVACION("renovacion");
+    RENOVADO("renovado"),
+    FINALIZADO("finalizado");
 
     private final String valor;
 

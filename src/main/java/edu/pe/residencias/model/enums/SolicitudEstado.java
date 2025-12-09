@@ -2,9 +2,10 @@ package edu.pe.residencias.model.enums;
 
 public enum SolicitudEstado {
     PENDIENTE("pendiente"),
+    RESERVADA("reservada"),
     ACEPTADA("aceptada"),
     RECHAZADA("rechazada"),
-    OCUPADA("ocupada");
+    CANCELADA("cancelada");
 
     private final String valor;
 

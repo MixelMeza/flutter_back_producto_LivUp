@@ -51,6 +51,15 @@ public class Pago {
     @Column(name = "fecha_pago")
     private LocalDateTime fechaPago;
 
+    @Column(name = "fecha_vencimiento")
+    private java.time.LocalDate fechaVencimiento;
+
+    @Column(name = "mes_correspondiente", length = 20)
+    private String mesCorrespondiente;
+
+    @Column(name = "generado_automaticamente")
+    private Boolean generadoAutomaticamente;
+
     @Column(name = "estado")
     @Enumerated(EnumType.STRING)
     private PagoEstado estado; // pendiente, completado, fallido

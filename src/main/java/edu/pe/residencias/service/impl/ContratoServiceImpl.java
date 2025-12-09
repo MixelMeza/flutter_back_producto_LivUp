@@ -31,12 +31,24 @@ public class ContratoServiceImpl implements ContratoService {
     private ResidenciaRepository residenciaRepository;
     
     @Autowired
+    private edu.pe.residencias.repository.HabitacionRepository habitacionRepository;
+    
+    @Autowired
     private NotificationService notificationService;
 
     @Override
     public Contrato create(Contrato contrato) {
         if (contrato.getEstado() == null) {
-            contrato.setEstado(ContratoEstado.VIGENTE);
+            // If fechaInicio is in the future, set to pendiente_inicio, otherwise vigente
+            try {
+                if (contrato.getFechaInicio() != null && contrato.getFechaInicio().isAfter(java.time.LocalDate.now())) {
+                    contrato.setEstado(ContratoEstado.PENDIENTE_INICIO);
+                } else {
+                    contrato.setEstado(ContratoEstado.VIGENTE);
+                }
+            } catch (Exception ex) {
+                contrato.setEstado(ContratoEstado.VIGENTE);
+            }
         }
         
         // Cambiar estado de la solicitud asociada a 'aceptada'
@@ -47,7 +59,7 @@ public class ContratoServiceImpl implements ContratoService {
                 solicitud.setEstado(SolicitudEstado.ACEPTADA);
                 solicitudAlojamientoRepository.save(solicitud);
                 
-                // Cambiar estado de las demás solicitudes de la misma habitación a 'ocupada'
+                // Cambiar estado de las demás solicitudes de la misma habitación a 'rechazada'
                 if (solicitud.getHabitacion() != null && solicitud.getHabitacion().getId() != null) {
                     var otrasSolicitudes = solicitudAlojamientoRepository.findAll();
                     for (var otra : otrasSolicitudes) {
@@ -55,7 +67,7 @@ public class ContratoServiceImpl implements ContratoService {
                                 otra.getHabitacion() != null &&
                                 otra.getHabitacion().getId().equals(solicitud.getHabitacion().getId()) &&
                                 !SolicitudEstado.ACEPTADA.equals(otra.getEstado())) {
-                            otra.setEstado(SolicitudEstado.OCUPADA);
+                            otra.setEstado(SolicitudEstado.RECHAZADA);
                             solicitudAlojamientoRepository.save(otra);
                         }
                     }
@@ -64,6 +76,21 @@ public class ContratoServiceImpl implements ContratoService {
         }
         
         Contrato saved = repository.save(contrato);
+
+        // Si el contrato está ligado a una solicitud/habitación, marcar la habitación como OCUPADO
+        try {
+            if (saved.getSolicitud() != null && saved.getSolicitud().getHabitacion() != null && saved.getSolicitud().getHabitacion().getId() != null) {
+                var habOpt = habitacionRepository.findById(saved.getSolicitud().getHabitacion().getId());
+                if (habOpt.isPresent()) {
+                    var hab = habOpt.get();
+                    hab.setEstado(edu.pe.residencias.model.enums.HabitacionEstado.OCUPADO);
+                    habitacionRepository.save(hab);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[CONTRATO] Error al marcar habitación como OCUPADO: " + e.getMessage());
+            e.printStackTrace();
+        }
         
         // 🔔 NOTIFICACIÓN: CONTRATO_CREADO - Enviar al estudiante
         try {

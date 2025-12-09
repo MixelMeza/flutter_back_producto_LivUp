@@ -259,11 +259,7 @@ public class ResidenciaController {
             if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             var r = residenciaOpt.get();
 
-            // Check owner or admin
-            if (!isOwnerOrAdmin(usuario, r)) {
-                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
-            }
-
+          
             // Build detailed DTO
             ResidenciaOwnerDTO dto = new ResidenciaOwnerDTO();
             dto.setId(r.getId());

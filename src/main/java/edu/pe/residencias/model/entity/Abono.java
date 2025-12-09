@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -41,10 +43,17 @@ public class Abono {
     @Column(name = "metodo_pago")
     private String metodoPago;
 
+    @Column(name = "estado")
+    @Enumerated(EnumType.STRING)
+    private edu.pe.residencias.model.enums.AbonoEstado estado;
+
         @jakarta.persistence.PrePersist
         public void prePersist() {
             if (this.fecha == null) {
                 this.fecha = java.time.LocalDateTime.now();
+            }
+            if (this.estado == null) {
+                this.estado = edu.pe.residencias.model.enums.AbonoEstado.REGISTRADO;
             }
         }
 }

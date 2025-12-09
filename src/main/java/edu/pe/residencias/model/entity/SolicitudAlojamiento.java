@@ -61,6 +61,12 @@ public class SolicitudAlojamiento {
     @Column(name = "fecha_solicitud")
     private LocalDate fechaSolicitud;
 
+    @Column(name = "fecha_inicio")
+    private LocalDate fechaInicio;
+
+    @Column(name = "fecha_fin")
+    private LocalDate fechaFin;
+
     @Column(name = "duracion_meses")
     private Integer duracionMeses;
 

@@ -1,16 +1,12 @@
 package edu.pe.residencias.model.enums;
 
-public enum PagoEstado {
-    PENDIENTE("pendiente"),
-    PARCIAL("parcial"),
-    PAGADO("pagado"),
-    PROXIMO("proximo"),
-    VENCIDO("vencido"),
+public enum AbonoEstado {
+    REGISTRADO("registrado"),
     ANULADO("anulado");
 
     private final String valor;
 
-    PagoEstado(String valor) {
+    AbonoEstado(String valor) {
         this.valor = valor;
     }
 
@@ -18,9 +14,9 @@ public enum PagoEstado {
         return valor;
     }
 
-    public static PagoEstado fromValor(String valor) {
+    public static AbonoEstado fromValor(String valor) {
         if (valor == null) return null;
-        for (PagoEstado estado : PagoEstado.values()) {
+        for (AbonoEstado estado : AbonoEstado.values()) {
             if (estado.valor.equalsIgnoreCase(valor)) {
                 return estado;
             }

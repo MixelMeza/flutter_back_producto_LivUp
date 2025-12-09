@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 
 import edu.pe.residencias.model.entity.SolicitudAlojamiento;
 import edu.pe.residencias.model.entity.Residencia;
+import edu.pe.residencias.model.entity.Habitacion;
+import edu.pe.residencias.model.enums.HabitacionEstado;
 import edu.pe.residencias.model.enums.SolicitudEstado;
 import edu.pe.residencias.repository.SolicitudAlojamientoRepository;
 import edu.pe.residencias.repository.ResidenciaRepository;
@@ -24,13 +26,40 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
     private ResidenciaRepository residenciaRepository;
     
     @Autowired
+    private edu.pe.residencias.repository.HabitacionRepository habitacionRepository;
+    
+    @Autowired
     private NotificationService notificationService;
 
     @Override
     public SolicitudAlojamiento create(SolicitudAlojamiento solicitudAlojamiento) {
-        if (solicitudAlojamiento.getEstado() == null) {
-            solicitudAlojamiento.setEstado(SolicitudEstado.PENDIENTE);
+        // Force initial state to PENDIENTE (created by tenant)
+        solicitudAlojamiento.setEstado(SolicitudEstado.PENDIENTE);
+
+        // If a habitacion is provided, validate it exists and is DISPONIBLE
+        if (solicitudAlojamiento.getHabitacion() != null && solicitudAlojamiento.getHabitacion().getId() != null) {
+            // Check if the same student already has a pending solicitud for this habitacion
+            if (solicitudAlojamiento.getEstudiante() != null && solicitudAlojamiento.getEstudiante().getId() != null) {
+                var existing = repository.findByHabitacionIdAndEstudianteIdAndEstado(
+                    solicitudAlojamiento.getHabitacion().getId(),
+                    solicitudAlojamiento.getEstudiante().getId(),
+                    SolicitudEstado.PENDIENTE
+                );
+                if (existing.isPresent()) {
+                    throw new IllegalStateException("Ya existe una solicitud pendiente para esta habitación");
+                }
+            }
+            Long habId = solicitudAlojamiento.getHabitacion().getId();
+            Habitacion hab = habitacionRepository.findById(habId).orElse(null);
+            if (hab == null) {
+                throw new IllegalArgumentException("Habitación no encontrada");
+            }
+            if (hab.getEstado() == null || !HabitacionEstado.DISPONIBLE.equals(hab.getEstado())) {
+                throw new IllegalStateException("La habitación no está disponible");
+            }
+            // Do NOT modify the habitacion state here. Reservation is done by owner action.
         }
+
         SolicitudAlojamiento saved = repository.save(solicitudAlojamiento);
         
         // Enviar notificación al propietario de la residencia
@@ -83,6 +112,26 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
         SolicitudEstado estadoAnterior = existente.map(SolicitudAlojamiento::getEstado).orElse(null);
         
         SolicitudAlojamiento updated = repository.save(solicitudAlojamiento);
+
+        // Si el estado cambió a RESERVADA o ACEPTADA, actualizar el estado de la habitación correspondiente
+        try {
+            if (estadoAnterior != null && !estadoAnterior.equals(updated.getEstado()) && updated.getHabitacion() != null && updated.getHabitacion().getId() != null) {
+                var habOpt = habitacionRepository.findById(updated.getHabitacion().getId());
+                if (habOpt.isPresent()) {
+                    var hab = habOpt.get();
+                    if (updated.getEstado() == SolicitudEstado.RESERVADA) {
+                        hab.setEstado(HabitacionEstado.RESERVADO);
+                        habitacionRepository.save(hab);
+                    } else if (updated.getEstado() == SolicitudEstado.ACEPTADA) {
+                        hab.setEstado(HabitacionEstado.OCUPADO);
+                        habitacionRepository.save(hab);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[SOLICITUD] Error al actualizar estado de habitación: " + e.getMessage());
+            e.printStackTrace();
+        }
         
         // Enviar notificación al solicitante si cambió el estado
         try {
@@ -145,5 +194,11 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
     @Override
     public List<SolicitudAlojamiento> readAll() {
         return repository.findAll();
+    }
+
+    @Override
+    public Optional<SolicitudAlojamiento> findByHabitacionIdAndEstudianteId(Long habitacionId, Long estudianteId) {
+        // Only consider solicitudes that are PENDIENTE: if it's not pending, treat as not existing for cancellation
+        return repository.findByHabitacionIdAndEstudianteIdAndEstado(habitacionId, estudianteId, SolicitudEstado.PENDIENTE);
     }
 }

@@ -21,18 +21,21 @@ public class EstadosReferenciaDTO {
         
         // Estados de Contratos
         dto.contratos = List.of(
+            Map.of("valor", "pendiente_inicio", "label", "Pendiente de Inicio"),
             Map.of("valor", "vigente", "label", "Vigente"),
-            Map.of("valor", "finalizado", "label", "Finalizado"),
+            Map.of("valor", "vencido", "label", "Vencido"),
             Map.of("valor", "cancelado", "label", "Cancelado"),
-            Map.of("valor", "renovacion", "label", "En Renovación")
+            Map.of("valor", "renovado", "label", "Renovado"),
+            Map.of("valor", "finalizado", "label", "Finalizado")
         );
         
         // Estados de Solicitudes
         dto.solicitudes = List.of(
             Map.of("valor", "pendiente", "label", "Pendiente"),
+            Map.of("valor", "reservada", "label", "Reservada"),
             Map.of("valor", "aceptada", "label", "Aceptada"),
             Map.of("valor", "rechazada", "label", "Rechazada"),
-            Map.of("valor", "ocupada", "label", "Ocupada")
+            Map.of("valor", "cancelada", "label", "Cancelada")
         );
         
         // Estados de Usuarios
@@ -45,9 +48,11 @@ public class EstadosReferenciaDTO {
         // Estados de Pagos
         dto.pagos = List.of(
             Map.of("valor", "pagado", "label", "Pagado"),
+            Map.of("valor", "parcial", "label", "Parcial"),
             Map.of("valor", "pendiente", "label", "Pendiente"),
+            Map.of("valor", "proximo", "label", "Próximo"),
             Map.of("valor", "vencido", "label", "Vencido"),
-            Map.of("valor", "completado", "label", "Completado")
+            Map.of("valor", "anulado", "label", "Anulado")
         );
         
         // Estados de Residencias

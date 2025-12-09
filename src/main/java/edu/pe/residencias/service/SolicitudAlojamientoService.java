@@ -11,4 +11,5 @@ public interface SolicitudAlojamientoService {
     void delete(Long id);
     Optional<SolicitudAlojamiento> read(Long id);
     List<SolicitudAlojamiento> readAll();
+    Optional<SolicitudAlojamiento> findByHabitacionIdAndEstudianteId(Long habitacionId, Long estudianteId);
 }
