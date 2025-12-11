@@ -1,6 +1,8 @@
 package edu.pe.residencias.controller.auth;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Optional;
 
 import io.jsonwebtoken.Claims;
@@ -73,21 +75,83 @@ public class AuthController {
             String roleName = u.getRol() == null ? null : u.getRol().getNombre();
             String token = jwtUtil.generateToken(java.util.UUID.fromString(u.getUuid()), u.getUsername(), roleName);
 
-            // register acceso (device + ip)
+            // register acceso (device + ip) -- use Peru timezone and better device detection
             try {
                 String ip = request.getHeader("X-Forwarded-For");
                 if (ip == null || ip.isEmpty()) {
                     ip = request.getRemoteAddr();
                 }
+
+                // Prefer client-sent device headers if available (mobile/Flutter can send these)
+                String deviceModel = request.getHeader("X-Device-Model");
+                String deviceId = request.getHeader("X-Device-Id");
+                String deviceName = request.getHeader("X-Device-Name");
+                String clientInfo = request.getHeader("X-Client-Info");
                 String userAgent = request.getHeader("User-Agent");
 
-                Acceso acceso = new Acceso();
-                acceso.setUsuario(u);
-                acceso.setUltimaSesion(LocalDateTime.now());
-                acceso.setIpAcceso(ip);
-                acceso.setDispositivo(userAgent);
-                System.out.println("[AuthController] Acceso to save: usuarioId=" + (u.getId() == null ? "null" : u.getId()) + ", uuid=" + u.getUuid() + ", ip=" + ip + ", dispositivo=" + userAgent + ", ultimaSesion=" + LocalDateTime.now());
-                accesoRepository.save(acceso);
+                String dispositivo = null;
+                if (deviceModel != null && !deviceModel.isBlank()) {
+                    dispositivo = deviceModel;
+                    if (deviceName != null && !deviceName.isBlank()) dispositivo += " (" + deviceName + ")";
+                } else if (clientInfo != null && !clientInfo.isBlank()) {
+                    dispositivo = clientInfo;
+                } else if (userAgent != null && !userAgent.isBlank()) {
+                    // Try to parse common patterns to get device info; fall back to full UA
+                    String ua = userAgent;
+                    // If UA looks generic (dart), include additional headers if present
+                    if (ua.toLowerCase().contains("dart") || ua.toLowerCase().contains("flutter")) {
+                        // prefer deviceId/name if present
+                        if (deviceId != null && !deviceId.isBlank()) {
+                            dispositivo = "Flutter (deviceId=" + deviceId + ")";
+                        } else if (deviceName != null && !deviceName.isBlank()) {
+                            dispositivo = "Flutter (" + deviceName + ")";
+                        } else {
+                            dispositivo = ua;
+                        }
+                    } else {
+                        dispositivo = ua;
+                    }
+                } else {
+                    dispositivo = "unknown";
+                }
+
+                // Try to find an existing Acceso for this user+device and update it instead of creating duplicates
+                Acceso acceso = null;
+                try {
+                    if (deviceId != null && !deviceId.isBlank()) {
+                        var existingByDeviceId = accesoRepository.findFirstByUsuarioIdAndDispositivoContaining(u.getId(), deviceId);
+                        if (existingByDeviceId.isPresent()) {
+                            acceso = existingByDeviceId.get();
+                        }
+                    }
+                    if (acceso == null) {
+                        var existingExact = accesoRepository.findFirstByUsuarioIdAndDispositivo(u.getId(), dispositivo);
+                        if (existingExact.isPresent()) {
+                            acceso = existingExact.get();
+                        }
+                    }
+                } catch (Exception repoEx) {
+                    // If repository lookup fails for any reason, fall back to creating a new Acceso
+                    System.err.println("[AuthController] Warning: acceso lookup failed: " + repoEx.getMessage());
+                }
+
+                if (acceso != null) {
+                    // Update existing record
+                    acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
+                    acceso.setIpAcceso(ip);
+                    acceso.setDispositivo(dispositivo);
+                    accesoRepository.save(acceso);
+                    System.out.println("[AuthController] Updated Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
+                } else {
+                    // Create new acceso record for this user+device
+                    acceso = new Acceso();
+                    acceso.setUsuario(u);
+                    acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
+                    acceso.setIpAcceso(ip);
+                    acceso.setDispositivo(dispositivo);
+                    accesoRepository.save(acceso);
+                    System.out.println("[AuthController] Created new Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
+                }
             } catch (Exception ex) {
                 // don't fail login if access logging fails, but log to console
                 System.err.println("[AuthController] Failed to log acceso: " + ex.getMessage());
