@@ -704,28 +704,66 @@ public class ResidenciaController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Residencia> delResidencia(@PathVariable("id") Long id) {
+    public ResponseEntity<Residencia> delResidencia(HttpServletRequest request, @PathVariable("id") Long id) {
         try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(null);
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(null);
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(null);
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(id);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) {
+                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            }
+
             residenciaService.delete(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            logger.warn("JWT parse error in DELETE /api/residencias/{id}", ex);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(null);
         } catch (Exception e) {
+            logger.error("Error deleting residencia id={}", id, e);
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> updateResidencia(@PathVariable("id") Long id, @RequestBody edu.pe.residencias.model.dto.ResidenciaUpdateDTO updateDTO) {
-        Optional<Residencia> opt = residenciaService.read(id);
-        if (opt.isEmpty()) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        
-        Residencia existing = opt.get();
-        
-        // Update only the fields provided in the DTO (null means don't update)
-        if (updateDTO.getNombre() != null) {
-            existing.setNombre(updateDTO.getNombre());
-        }
+    public ResponseEntity<?> updateResidencia(HttpServletRequest request, @PathVariable("id") Long id, @RequestBody edu.pe.residencias.model.dto.ResidenciaUpdateDTO updateDTO) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            Optional<Residencia> opt = residenciaService.read(id);
+            if (opt.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            }
+            Residencia existing = opt.get();
+            if (!isOwnerOrAdmin(usuario, existing)) {
+                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            }
+
+            // Update only the fields provided in the DTO (null means don't update)
+            if (updateDTO.getNombre() != null) {
+                existing.setNombre(updateDTO.getNombre());
+            }
         if (updateDTO.getTipo() != null) {
             existing.setTipo(updateDTO.getTipo());
         }
@@ -745,8 +783,15 @@ public class ResidenciaController {
             existing.setServicios(ServiciosUtil.normalizeServiciosText(updateDTO.getServicios()));
         }
         
-        Residencia updatedResidencia = residenciaService.update(existing);
-        return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
+            Residencia updatedResidencia = residenciaService.update(existing);
+            return new ResponseEntity<>(updatedResidencia, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            logger.warn("JWT parse error in PUT /api/residencias/{id}", ex);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Unexpected error updating residencia id={}", id, e);
+            return new ResponseEntity<>("Error interno al actualizar residencia", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
         @PutMapping("/{id}/imagenes")
@@ -789,8 +834,29 @@ public class ResidenciaController {
 
     // NUEVO: Listado paginado de todas las residencias (ADMIN)
     @GetMapping("/admin/paginated")
-    public ResponseEntity<?> getResidenciasPaginatedAdmin(Pageable pageable) {
+    public ResponseEntity<?> getResidenciasPaginatedAdmin(HttpServletRequest request, Pageable pageable) {
         try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            // require admin role
+            try {
+                if (usuario.getRol() == null || usuario.getRol().getNombre() == null || !"admin".equalsIgnoreCase(usuario.getRol().getNombre())) {
+                    return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+                }
+            } catch (Exception ignore) {
+                return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            }
+
             Page<Residencia> residenciasPage = residenciaService.findAllPaginated(pageable);
             if (residenciasPage.isEmpty()) {
                 return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -810,7 +876,11 @@ public class ResidenciaController {
             response.put("hasPrevious", residenciasPage.hasPrevious());
 
             return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            logger.warn("JWT parse error in GET /api/residencias/admin/paginated", ex);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
         } catch (Exception e) {
+            logger.error("Error in admin paginated residencias", e);
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

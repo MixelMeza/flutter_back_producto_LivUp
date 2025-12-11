@@ -213,7 +213,7 @@ public class AuthController {
 
             // Enviar email de verificación
             try {
-                String verifyLink = "https://flutter-back-producto-livup-1.onrender.com/api/auth/verify?token=" + verificationToken;
+                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
                 String subject = "Verifica tu correo en LivUp";
                 String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
                 emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
@@ -256,7 +256,7 @@ public class AuthController {
             }
 
             try {
-                String verifyLink = "https://flutter-back-producto-livup-1.onrender.com/api/auth/verify?token=" + token;
+                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + token;
                 String subject = "Verifica tu correo en LivUp";
                 String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
                 emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
@@ -358,7 +358,7 @@ public class AuthController {
 
             // Enviar email de verificación al nuevo correo
             try {
-                String verifyLink = "https://flutter-back-producto-livup-1.onrender.com/api/auth/verify?token=" + verificationToken;
+                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
                 String subject = "Verifica tu nuevo correo en LivUp";
                 String bodyText = "Has cambiado tu correo en LivUp. Para verificar tu nuevo correo haz clic en: " + verifyLink;
                 emailService.sendSimpleMessage(newEmail, subject, bodyText);

@@ -109,8 +109,10 @@ public class EmailService {
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         int status = response.statusCode();
+        String respBody = response.body();
+        System.out.println("[EmailService] SendGrid response status=" + status + " body=" + respBody + " headers=" + response.headers().map());
         if (status < 200 || status >= 300) {
-            throw new IllegalStateException("SendGrid API returned status=" + status + ", body=" + response.body());
+            throw new IllegalStateException("SendGrid API returned status=" + status + ", body=" + respBody);
         }
         System.out.println("[EmailService] Sent email via SendGrid to=" + to + " status=" + status);
     }
