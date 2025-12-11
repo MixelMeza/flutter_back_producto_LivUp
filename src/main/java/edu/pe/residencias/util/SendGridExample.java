@@ -37,8 +37,20 @@ public class SendGridExample {
         // Environment variables override properties file
         String envFrom = System.getenv("APP_MAIL_FROM");
         String envTo = System.getenv("APP_MAIL_TEST_RECIPIENT");
+        String envReplyTo = System.getenv("APP_MAIL_REPLY_TO");
         if (envFrom != null && !envFrom.isBlank()) fromAddr = envFrom;
         if (envTo != null && !envTo.isBlank()) toAddr = envTo;
+        String replyToAddr = null;
+        try (InputStream in = SendGridExample.class.getClassLoader().getResourceAsStream("application.properties")) {
+            if (in != null) {
+                Properties p2 = new Properties();
+                p2.load(in);
+                replyToAddr = p2.getProperty("app.mail.reply-to");
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        if (envReplyTo != null && !envReplyTo.isBlank()) replyToAddr = envReplyTo;
 
         if (fromAddr == null || fromAddr.isBlank()) fromAddr = "test@example.com";
         if (toAddr == null || toAddr.isBlank()) toAddr = fromAddr; // default to same address if no test recipient set
@@ -48,6 +60,9 @@ public class SendGridExample {
         Email to = new Email(toAddr);
         Content content = new Content("text/plain", "and easy to do anywhere, even with Java");
         Mail mail = new Mail(from, subject, to, content);
+        if (replyToAddr != null && !replyToAddr.isBlank()) {
+            mail.setReplyTo(new Email(replyToAddr));
+        }
 
         SendGrid sg = new SendGrid(apiKey);
         // sg.setDataResidency("eu"); // uncomment if using EU data residency

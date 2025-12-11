@@ -22,6 +22,9 @@ public class EmailService {
     @Value("${app.mail.from:no-reply@example.com}")
     private String fromAddress;
 
+    @Value("${app.mail.reply-to:}")
+    private String replyToAddress;
+
     @Value("${SENDGRID_API_KEY:}")
     private String sendgridApiKey;
 
@@ -47,6 +50,9 @@ public class EmailService {
         message.setTo(to);
         // set From using configured property (helps with Gmail/SendGrid providers)
         message.setFrom(fromAddress);
+        if (replyToAddress != null && !replyToAddress.isBlank()) {
+            message.setReplyTo(replyToAddress);
+        }
         message.setSubject(subject);
         message.setText(text);
 
@@ -57,6 +63,7 @@ public class EmailService {
         while (true) {
             try {
                 attempts++;
+                System.out.println("[EmailService] Sending via SMTP from=" + fromAddress + " replyTo=" + replyToAddress + " to=" + to + " subject=" + subject);
                 mailSender.send(message);
                 // success
                 if (attempts > 1) {
@@ -83,7 +90,14 @@ public class EmailService {
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
 
-        String body = "{\"personalizations\":[{\"to\":[{\"email\":\"" + escapeJson(to) + "\"}]}],\"from\":{\"email\":\"" + escapeJson(fromAddress) + "\"},\"subject\":\"" + escapeJson(subject) + "\",\"content\":[{\"type\":\"text/plain\",\"value\":\"" + escapeJson(text) + "\"}]}";
+        StringBuilder b = new StringBuilder();
+        b.append("{\"personalizations\":[{\"to\":[{\"email\":\"").append(escapeJson(to)).append("\"}]}]");
+        b.append(",\"from\":{\"email\":\"").append(escapeJson(fromAddress)).append("\"}");
+        if (replyToAddress != null && !replyToAddress.isBlank()) {
+            b.append(",\"reply_to\":{\"email\":\"").append(escapeJson(replyToAddress)).append("\"}");
+        }
+        b.append(",\"subject\":\"").append(escapeJson(subject)).append("\",\"content\":[{\"type\":\"text/plain\",\"value\":\"").append(escapeJson(text)).append("\"}]}");
+        String body = b.toString();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.sendgrid.com/v3/mail/send"))
