@@ -1,5 +1,12 @@
 package edu.pe.residencias.service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
@@ -15,12 +22,27 @@ public class EmailService {
     @Value("${app.mail.from:no-reply@example.com}")
     private String fromAddress;
 
+    @Value("${SENDGRID_API_KEY:}")
+    private String sendgridApiKey;
+
     public void sendSimpleMessage(String to, String subject, String text) {
+        // If SendGrid API key is configured, prefer HTTP API (avoids SMTP egress blocks)
+        if (sendgridApiKey != null && !sendgridApiKey.isBlank()) {
+            try {
+                sendViaSendGrid(to, subject, text);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] SendGrid API send failed, falling back to JavaMailSender: " + ex.getMessage());
+                // continue to SMTP fallback
+            }
+        }
+
         if (mailSender == null) {
             // Mail not configured; log to console for dev
             System.out.println("[EmailService] MailSender not configured. Would send to=" + to + ", subject=" + subject + ", text=" + text);
             return;
         }
+
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(to);
         // set From using configured property (helps with Gmail/SendGrid providers)
@@ -52,5 +74,35 @@ public class EmailService {
                 try { Thread.sleep(sleepMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             }
         }
+    }
+
+    private void sendViaSendGrid(String to, String subject, String text) throws Exception {
+        if (sendgridApiKey == null || sendgridApiKey.isBlank()) throw new IllegalStateException("SENDGRID_API_KEY not configured");
+
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
+                .build();
+
+        String body = "{\"personalizations\":[{\"to\":[{\"email\":\"" + escapeJson(to) + "\"}]}],\"from\":{\"email\":\"" + escapeJson(fromAddress) + "\"},\"subject\":\"" + escapeJson(subject) + "\",\"content\":[{\"type\":\"text/plain\",\"value\":\"" + escapeJson(text) + "\"}]}";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://api.sendgrid.com/v3/mail/send"))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", "Bearer " + sendgridApiKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        int status = response.statusCode();
+        if (status < 200 || status >= 300) {
+            throw new IllegalStateException("SendGrid API returned status=" + status + ", body=" + response.body());
+        }
+        System.out.println("[EmailService] Sent email via SendGrid to=" + to + " status=" + status);
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "\\r");
     }
 }
