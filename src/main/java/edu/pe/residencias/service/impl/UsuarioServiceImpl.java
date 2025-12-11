@@ -60,6 +60,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     @org.springframework.beans.factory.annotation.Value("${app.frontend.url:https://flutter-back-producto-livup-1.onrender.com}")
     private String frontendBaseUrl;
 
+    
     @Override
     public Usuario create(Usuario usuario) {
         return repository.save(usuario);
