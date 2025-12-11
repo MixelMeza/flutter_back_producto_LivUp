@@ -232,6 +232,46 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/send-verification-by-token")
+    public ResponseEntity<?> sendVerificationByToken(@RequestBody java.util.Map<String, String> body) {
+        try {
+            String token = body.get("token");
+            if (token == null || token.isBlank()) {
+                return new ResponseEntity<>(new ErrorResponse("El token es requerido"), HttpStatus.BAD_REQUEST);
+            }
+            var opt = verificationTokenRepository.findByToken(token);
+            if (opt.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("Token no encontrado"), HttpStatus.NOT_FOUND);
+            }
+            var vt = opt.get();
+            var user = vt.getUsuario();
+            if (user == null || user.getPersona() == null || user.getPersona().getEmail() == null || user.getPersona().getEmail().isBlank()) {
+                return new ResponseEntity<>(new ErrorResponse("El usuario asociado al token no tiene correo registrado"), HttpStatus.BAD_REQUEST);
+            }
+            if (Boolean.TRUE.equals(vt.getUsed())) {
+                return new ResponseEntity<>(new ErrorResponse("El token ya fue usado"), HttpStatus.BAD_REQUEST);
+            }
+            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(LocalDateTime.now())) {
+                return new ResponseEntity<>(new ErrorResponse("El token ha expirado"), HttpStatus.BAD_REQUEST);
+            }
+
+            try {
+                String verifyLink = "https://flutter-back-producto-livup-1.onrender.com/api/auth/verify?token=" + token;
+                String subject = "Verifica tu correo en LivUp";
+                String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
+                emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
+            } catch (Exception emailEx) {
+                System.err.println("[AuthController] Error al enviar email por token: " + emailEx.getMessage());
+                return new ResponseEntity<>(new ErrorResponse("No se pudo enviar el correo de verificación"), HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
+            return new ResponseEntity<>("Correo de verificación reenviado correctamente a " + user.getPersona().getEmail(), HttpStatus.OK);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Error interno al reenviar correo de verificación"), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     @PostMapping("/change-email")
     public ResponseEntity<?> changeEmail(@RequestBody java.util.Map<String, String> body, HttpServletRequest request) {
         try {
