@@ -12,4 +12,5 @@ public interface SolicitudAlojamientoService {
     Optional<SolicitudAlojamiento> read(Long id);
     List<SolicitudAlojamiento> readAll();
     Optional<SolicitudAlojamiento> findByHabitacionIdAndEstudianteId(Long habitacionId, Long estudianteId);
+    List<SolicitudAlojamiento> findByHabitacionIdOrderByFechaSolicitudDesc(Long habitacionId);
 }

@@ -10,4 +10,5 @@ import edu.pe.residencias.model.enums.SolicitudEstado;
 public interface SolicitudAlojamientoRepository extends JpaRepository<SolicitudAlojamiento, Long> {
 	java.util.Optional<SolicitudAlojamiento> findByHabitacionIdAndEstudianteId(Long habitacionId, Long estudianteId);
 	java.util.Optional<SolicitudAlojamiento> findByHabitacionIdAndEstudianteIdAndEstado(Long habitacionId, Long estudianteId, SolicitudEstado estado);
+	java.util.List<SolicitudAlojamiento> findByHabitacionIdOrderByFechaSolicitudDesc(Long habitacionId);
 }

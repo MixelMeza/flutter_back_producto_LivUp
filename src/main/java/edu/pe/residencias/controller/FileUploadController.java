@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -43,6 +44,12 @@ public class FileUploadController {
 
     @Autowired
     private PersonaRepository personaRepository;
+
+    @Autowired
+    private edu.pe.residencias.repository.UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private edu.pe.residencias.security.JwtUtil jwtUtil;
 
     @Autowired
     private HabitacionRepository habitacionRepository;
@@ -181,6 +188,70 @@ public class FileUploadController {
             resp.put("url", url);
             resp.put("result", result);
             return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Upload failed: " + e.getMessage());
+        }
+    }
+
+    // Upload usuario photo by usuario id (updates linked persona.fotoUrl)
+    @PostMapping("/usuario/{usuarioId}/imagen")
+    public ResponseEntity<?> uploadUsuarioFotoByUsuarioId(@PathVariable Long usuarioId,
+                                                           @RequestParam("file") MultipartFile file,
+                                                           @RequestParam(value = "folder", defaultValue = "personas") String folder) {
+        try {
+            var usuarioOpt = usuarioRepository.findById(usuarioId);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+            var persona = usuario.getPersona();
+            if (persona == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Persona vinculada no encontrada");
+
+            Map result = cloudinaryService.uploadImage(file, folder);
+            String url = (String) result.get("secure_url");
+
+            persona.setFotoUrl(url);
+            personaRepository.save(persona);
+
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("url", url);
+            resp.put("result", result);
+            return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Upload failed: " + e.getMessage());
+        }
+    }
+
+    // Upload usuario photo for current authenticated user (uses Authorization header JWT)
+    @PostMapping("/usuarios/me/imagen")
+    public ResponseEntity<?> uploadUsuarioFotoMe(@RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                @RequestParam("file") MultipartFile file,
+                                                @RequestParam(value = "folder", defaultValue = "personas") String folder) {
+        try {
+            if (authHeader == null || authHeader.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("No token provided");
+            }
+            String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            io.jsonwebtoken.Claims claims = jwtUtil.parseToken(token);
+            String uuid = claims.get("uid", String.class);
+            if (uuid == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid token");
+
+            var usuarioOpt = usuarioRepository.findByUuid(uuid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+            var persona = usuario.getPersona();
+            if (persona == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Persona vinculada no encontrada");
+
+            Map result = cloudinaryService.uploadImage(file, folder);
+            String url = (String) result.get("secure_url");
+
+            persona.setFotoUrl(url);
+            personaRepository.save(persona);
+
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("url", url);
+            resp.put("result", result);
+            return ResponseEntity.ok(resp);
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token expired");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Upload failed: " + e.getMessage());
         }

@@ -201,4 +201,9 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
         // Only consider solicitudes that are PENDIENTE: if it's not pending, treat as not existing for cancellation
         return repository.findByHabitacionIdAndEstudianteIdAndEstado(habitacionId, estudianteId, SolicitudEstado.PENDIENTE);
     }
+
+    @Override
+    public List<SolicitudAlojamiento> findByHabitacionIdOrderByFechaSolicitudDesc(Long habitacionId) {
+        return repository.findByHabitacionIdOrderByFechaSolicitudDesc(habitacionId);
+    }
 }

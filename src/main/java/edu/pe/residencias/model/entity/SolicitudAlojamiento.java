@@ -1,6 +1,7 @@
 package edu.pe.residencias.model.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -18,7 +19,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -30,20 +30,18 @@ import edu.pe.residencias.model.enums.SolicitudEstado;
 @Setter
 @Getter
 @Entity
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @Table(name = "solicitudes_alojamiento")
 public class SolicitudAlojamiento {
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.fechaSolicitud == null) {
-            this.fechaSolicitud = java.time.LocalDate.now();
+            this.fechaSolicitud = java.time.LocalDateTime.now();
         }
     }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
-    @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne
@@ -59,7 +57,7 @@ public class SolicitudAlojamiento {
     private Habitacion habitacion;
 
     @Column(name = "fecha_solicitud")
-    private LocalDate fechaSolicitud;
+    private LocalDateTime fechaSolicitud;
 
     @Column(name = "fecha_inicio")
     private LocalDate fechaInicio;

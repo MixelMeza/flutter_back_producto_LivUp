@@ -154,4 +154,37 @@ public class SolicitudAlojamientoController {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    @GetMapping("/habitacion/{habitacionId}/solicitudes")
+    public ResponseEntity<?> listarSolicitudesPorHabitacion(@PathVariable("habitacionId") Long habitacionId) {
+        try {
+            var list = solicitudAlojamientoService.findByHabitacionIdOrderByFechaSolicitudDesc(habitacionId);
+            if (list == null || list.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            for (var s : list) {
+                java.util.Map<String, Object> m = new java.util.HashMap<>();
+                m.put("id", s.getId());
+                m.put("fechaSolicitud", s.getFechaSolicitud());
+                m.put("fechaInicio", s.getFechaInicio());
+                m.put("fechaFin", s.getFechaFin());
+                m.put("duracionMeses", s.getDuracionMeses());
+                m.put("comentarios", s.getComentarios());
+                m.put("estado", s.getEstado());
+                if (s.getEstudiante() != null && s.getEstudiante().getPersona() != null) {
+                    var p = s.getEstudiante().getPersona();
+                    m.put("nombre", (p.getNombre() != null ? p.getNombre() : "") + " " + (p.getApellido() != null ? p.getApellido() : ""));
+                    m.put("fotoPerfil", p.getFotoUrl());
+                } else {
+                    m.put("nombre", null);
+                    m.put("fotoPerfil", null);
+                }
+                out.add(m);
+            }
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }
