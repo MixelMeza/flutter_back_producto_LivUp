@@ -27,6 +27,30 @@ public class EmailService {
         message.setFrom(fromAddress);
         message.setSubject(subject);
         message.setText(text);
-        mailSender.send(message);
+
+        // Retry logic: try up to 3 times with backoff (5s, 10s)
+        int attempts = 0;
+        int maxAttempts = 3;
+        long[] backoffMs = new long[] {5000L, 10000L};
+        while (true) {
+            try {
+                attempts++;
+                mailSender.send(message);
+                // success
+                if (attempts > 1) {
+                    System.out.println("[EmailService] Email sent on attempt " + attempts + " to=" + to);
+                }
+                break;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Attempt " + attempts + " failed to send email to=" + to + ": " + ex.getMessage());
+                if (attempts >= maxAttempts) {
+                    System.err.println("[EmailService] All attempts failed to send email to=" + to);
+                    throw ex;
+                }
+                // sleep before retry
+                long sleepMs = backoffMs[Math.min(attempts - 1, backoffMs.length - 1)];
+                try { Thread.sleep(sleepMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
+        }
     }
 }
