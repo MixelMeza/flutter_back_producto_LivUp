@@ -57,7 +57,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Autowired
     private edu.pe.residencias.service.EmailService emailService;
 
-    @org.springframework.beans.factory.annotation.Value("${app.frontend.url:http://localhost:8080}")
+    @org.springframework.beans.factory.annotation.Value("${app.frontend.url:https://flutter-back-producto-livup-1.onrender.com}")
     private String frontendBaseUrl;
 
     @Override
@@ -154,8 +154,12 @@ public class UsuarioServiceImpl implements UsuarioService {
                 String email = saved.getPersona() != null ? saved.getPersona().getEmail() : null;
                 if (email != null && !email.isBlank()) {
                     String subject = "Verifica tu correo en LivUp";
+                    // Include username and provided password in the verification email (useful for onboarding/testing).
+                    // WARNING: sending raw passwords via email is not recommended in production. Proceed only if acceptable.
+                    String providedPassword = dto.getPassword();
                     String body = "Bienvenido a LivUp!\n\nPara verificar tu correo haz clic en el siguiente enlace:\n"
-                            + verifyLink + "\n\nSi no fuiste tú, ignora este correo.";
+                        + verifyLink + "\n\nCredenciales:\n  usuario: " + dto.getUsername() + "\n  contraseña: " + (providedPassword == null ? "" : providedPassword)
+                        + "\n\nSi no fuiste tú, ignora este correo.";
                     emailService.sendSimpleMessage(email, subject, body);
                 } else {
                     System.out.println("[UsuarioService] No email present for user id=" + saved.getId());
