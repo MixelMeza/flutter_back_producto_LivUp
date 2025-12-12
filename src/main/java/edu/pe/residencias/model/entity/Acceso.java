@@ -42,4 +42,10 @@ public class Acceso {
 
     @Column(name = "dispositivo")
     private String dispositivo;
+
+    @Column(name = "device_id")
+    private String deviceId;
+
+    @Column(name = "token_notificacion")
+    private String tokenNotificacion;
 }

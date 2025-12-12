@@ -14,4 +14,7 @@ public interface AccesoRepository extends JpaRepository<Acceso, Long> {
 
 	// Find by exact dispositivo string for the user
 	java.util.Optional<Acceso> findFirstByUsuarioIdAndDispositivo(Long usuarioId, String dispositivo);
+
+	// Prefer lookup by device_id column when available
+	java.util.Optional<Acceso> findFirstByUsuarioIdAndDeviceId(Long usuarioId, String deviceId);
 }

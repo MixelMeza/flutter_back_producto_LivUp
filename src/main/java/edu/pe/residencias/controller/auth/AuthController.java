@@ -115,11 +115,14 @@ public class AuthController {
                     dispositivo = "unknown";
                 }
 
+                // Read notification token header if provided
+                String notificationToken = request.getHeader("X-Notification-Token");
+
                 // Try to find an existing Acceso for this user+device and update it instead of creating duplicates
                 Acceso acceso = null;
                 try {
                     if (deviceId != null && !deviceId.isBlank()) {
-                        var existingByDeviceId = accesoRepository.findFirstByUsuarioIdAndDispositivoContaining(u.getId(), deviceId);
+                        var existingByDeviceId = accesoRepository.findFirstByUsuarioIdAndDeviceId(u.getId(), deviceId);
                         if (existingByDeviceId.isPresent()) {
                             acceso = existingByDeviceId.get();
                         }
@@ -140,6 +143,8 @@ public class AuthController {
                     acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
                     acceso.setIpAcceso(ip);
                     acceso.setDispositivo(dispositivo);
+                    acceso.setDeviceId(deviceId);
+                    acceso.setTokenNotificacion(notificationToken);
                     accesoRepository.save(acceso);
                     System.out.println("[AuthController] Updated Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
                 } else {
@@ -149,6 +154,8 @@ public class AuthController {
                     acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
                     acceso.setIpAcceso(ip);
                     acceso.setDispositivo(dispositivo);
+                    acceso.setDeviceId(deviceId);
+                    acceso.setTokenNotificacion(notificationToken);
                     accesoRepository.save(acceso);
                     System.out.println("[AuthController] Created new Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
                 }
