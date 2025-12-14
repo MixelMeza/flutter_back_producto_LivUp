@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -23,6 +25,7 @@ import edu.pe.residencias.model.enums.SolicitudEstado;
 @RestController
 @RequestMapping("/api/solicitudes-alojamiento")
 public class SolicitudAlojamientoController {
+    private static final Logger logger = LoggerFactory.getLogger(SolicitudAlojamientoController.class);
     
     @Autowired
     private SolicitudAlojamientoService solicitudAlojamientoService;
@@ -120,17 +123,19 @@ public class SolicitudAlojamientoController {
             var opt = solicitudAlojamientoService.read(id);
             if (opt.isPresent()) {
                 var s = opt.get();
-                return ResponseEntity.ok(java.util.Map.of(
-                    "id", s.getId(),
-                    "fijo", s.getFijo(),
-                    "fechaInicio", s.getFechaInicio(),
-                    "fechaFin", s.getFechaFin()
-                ));
+                java.util.Map<String, Object> resp = new java.util.HashMap<>();
+                resp.put("id", s.getId());
+                resp.put("fijo", s.getFijo());
+                resp.put("fechaInicio", s.getFechaInicio());
+                // allow null fechaFin
+                resp.put("fechaFin", s.getFechaFin());
+                return ResponseEntity.ok(resp);
             } else {
                 return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             }
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            logger.error("Error en obtenerInfoSolicitudPorId id={}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", e.getMessage()));
         }
     }
 
@@ -141,17 +146,19 @@ public class SolicitudAlojamientoController {
             var opt = solicitudAlojamientoService.findByHabitacionIdAndEstudianteId(habitacionId, estudianteId);
             if (opt.isPresent()) {
                 var s = opt.get();
-                return ResponseEntity.ok(java.util.Map.of(
-                    "id", s.getId(),
-                    "fijo", s.getFijo(),
-                    "fechaInicio", s.getFechaInicio(),
-                    "fechaFin", s.getFechaFin()
-                ));
+                java.util.Map<String, Object> resp = new java.util.HashMap<>();
+                resp.put("id", s.getId());
+                resp.put("fijo", s.getFijo());
+                resp.put("fechaInicio", s.getFechaInicio());
+                resp.put("fechaFin", s.getFechaFin());
+                resp.put("descripcion", s.getComentarios());
+                return ResponseEntity.ok(resp);
             } else {
                 return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             }
         } catch (Exception e) {
-            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+            logger.error("Error en obtenerInfoSolicitudPorHabitacionYEstudiante habId={} estudianteId={}", habitacionId, estudianteId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", e.getMessage()));
         }
     }
 
