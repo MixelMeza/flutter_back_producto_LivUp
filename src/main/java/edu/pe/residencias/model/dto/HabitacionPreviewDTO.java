@@ -11,6 +11,7 @@ public class HabitacionPreviewDTO {
     private Integer piso;
     private Integer capacidad;
     private Boolean destacado;
+    private Boolean favorito;
 
     public HabitacionPreviewDTO() {}
 
@@ -20,6 +21,7 @@ public class HabitacionPreviewDTO {
         this.precio = precio;
         this.estado = estado;
         this.imagen_principal = imagen_principal;
+        this.favorito = false;
     }
 
     public Integer getPiso() { return piso; }
@@ -28,6 +30,9 @@ public class HabitacionPreviewDTO {
     public void setCapacidad(Integer capacidad) { this.capacidad = capacidad; }
     public Boolean getDestacado() { return destacado; }
     public void setDestacado(Boolean destacado) { this.destacado = destacado; }
+
+    public Boolean getFavorito() { return favorito; }
+    public void setFavorito(Boolean favorito) { this.favorito = favorito; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

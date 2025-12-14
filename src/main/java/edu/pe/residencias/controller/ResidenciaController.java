@@ -87,6 +87,9 @@ public class ResidenciaController {
     private edu.pe.residencias.service.HabitacionService habitacionService;
 
     @Autowired
+    private edu.pe.residencias.service.FavoritoService favoritoService;
+
+    @Autowired
     private edu.pe.residencias.repository.ImagenHabitacionRepository imagenHabitacionRepository;
 
     @GetMapping
@@ -599,6 +602,23 @@ public class ResidenciaController {
             var residenciaOpt = residenciaRepository.findById(id);
             if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 
+            // try to resolve authenticated user (optional)
+            Long currentUserId = null;
+            try {
+                String authHeader = org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes
+                    ? ((org.springframework.web.context.request.ServletRequestAttributes)org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes()).getRequest().getHeader("Authorization")
+                    : null;
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    String token = authHeader.substring("Bearer ".length()).trim();
+                    var claims = jwtUtil.parseToken(token);
+                    String uid = claims.get("uid", String.class);
+                    if (uid != null && !uid.isBlank()) {
+                        var uOpt = usuarioRepository.findByUuid(uid);
+                        if (uOpt.isPresent()) currentUserId = uOpt.get().getId();
+                    }
+                }
+            } catch (Exception ignored) { }
+
             java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaId(id);
             if (hs == null) hs = java.util.Collections.emptyList();
 
@@ -639,6 +659,17 @@ public class ResidenciaController {
                 try {
                     dto.setDestacado(h.getDestacado());
                 } catch (Exception ignored) {}
+                // determine favorito for authenticated user
+                try {
+                    if (currentUserId != null) {
+                        boolean liked = favoritoService.isLiked(currentUserId, h.getId());
+                        dto.setFavorito(liked);
+                    } else {
+                        dto.setFavorito(false);
+                    }
+                } catch (Exception ignored) {
+                    dto.setFavorito(false);
+                }
                 out.add(dto);
             }
 
