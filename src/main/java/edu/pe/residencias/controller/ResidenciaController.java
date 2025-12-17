@@ -207,11 +207,30 @@ public class ResidenciaController {
     // (multipart upload removed) Only JSON creation is supported for habitaciones now.
 
     @GetMapping("/map")
-    public ResponseEntity<?> getResidenciasForMap() {
+    public ResponseEntity<?> getResidenciasForMap(HttpServletRequest request) {
         try {
+            // require verified email users only
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+            if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body("Email no verificado");
+            }
+
             java.util.List<edu.pe.residencias.model.dto.MapResidenciaDTO> list = residenciaService.findForMap();
             if (list.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             return new ResponseEntity<>(list, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            logger.warn("JWT parse error in /api/residencias/map", ex);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
         } catch (Exception e) {
             logger.error("Error in /api/residencias/map", e);
             return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -535,7 +554,11 @@ public class ResidenciaController {
                 if (usuarioOpt.isEmpty()) {
                     return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
                 }
-                residencia.setUsuario(usuarioOpt.get());
+                var usuario = usuarioOpt.get();
+                if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body("Email no verificado");
+                }
+                residencia.setUsuario(usuario);
             } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
                 return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
             } catch (Exception ex) {

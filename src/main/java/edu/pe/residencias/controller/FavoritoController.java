@@ -57,6 +57,9 @@ public class FavoritoController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
             }
             var usuario = usuarioOpt.get();
+            if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Email no verificado");
+            }
             
             List<Favorito> favoritos = favoritoRepository.findByUsuarioIdWithHabitacionAndResidencia(usuario.getId());
             
@@ -123,8 +126,31 @@ public class FavoritoController {
     }
 
     @PostMapping
-    public Favorito crearFavorito(@RequestBody Favorito favorito) {
-        return favoritoService.save(favorito);
+    public ResponseEntity<?> crearFavorito(HttpServletRequest request, @RequestBody Favorito favorito) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+            if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Email no verificado");
+            }
+            favorito.setUsuario(usuario);
+            Favorito saved = favoritoService.save(favorito);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>("Error interno al crear favorito", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @PutMapping("/{id}")

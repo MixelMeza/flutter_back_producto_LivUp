@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.validation.Valid;
 import edu.pe.residencias.model.entity.Ubicacion;
 import edu.pe.residencias.service.UbicacionService;
+import edu.pe.residencias.security.JwtUtil;
+import edu.pe.residencias.repository.UsuarioRepository;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/api/ubicaciones")
@@ -26,24 +29,64 @@ public class UbicacionController {
     @Autowired
     private UbicacionService ubicacionService;
 
+    @Autowired
+    private JwtUtil jwtUtil;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
     @GetMapping
-    public ResponseEntity<List<Ubicacion>> readAll() {
+    public ResponseEntity<List<Ubicacion>> readAll(HttpServletRequest request) {
         try {
-            List<Ubicacion> ubicaciones = ubicacionService.readAll();
-            if (ubicaciones.isEmpty()) {
-                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            // require authenticated user with verified email
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            var usuario = usuarioOpt.get();
+            if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(null);
+            }
+
+            List<Ubicacion> ubicaciones = ubicacionService.readAll();
+            if (ubicaciones.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             return new ResponseEntity<>(ubicaciones, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @PostMapping
-    public ResponseEntity<Ubicacion> crear(@Valid @RequestBody Ubicacion ubicacion) {
+    public ResponseEntity<Ubicacion> crear(HttpServletRequest request, @Valid @RequestBody Ubicacion ubicacion) {
         try {
+            // require authenticated verified user
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            var usuario = usuarioOpt.get();
+            if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
             Ubicacion u = ubicacionService.create(ubicacion);
             return new ResponseEntity<>(u, HttpStatus.CREATED);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
