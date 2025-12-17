@@ -94,11 +94,16 @@ public class AuthController {
 
                 edu.pe.residencias.model.entity.Dispositivo dispositivoEntity = null;
                 try {
+                    System.out.println("[AuthController] device info: fcmToken='" + fcmToken + "', plataforma='" + plataforma + "', modelo='" + modelo + "', osVersion='" + osVersion + "', usuarioId=" + u.getId());
                     if (fcmToken != null && !fcmToken.isBlank()) {
                         dispositivoEntity = dispositivoService.registerOrUpdate(fcmToken, plataforma, modelo, osVersion, u.getId());
+                        System.out.println("[AuthController] dispositivo registered/updated id=" + (dispositivoEntity == null ? "null" : dispositivoEntity.getId()));
+                    } else {
+                        System.out.println("[AuthController] No fcmToken provided in login request; skipping dispositivo register");
                     }
                 } catch (Exception dEx) {
                     System.err.println("[AuthController] Warning: dispositivo register failed: " + dEx.getMessage());
+                    dEx.printStackTrace();
                 }
 
                 // create acceso event (history)

@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import edu.pe.residencias.model.entity.Dispositivo;
 import edu.pe.residencias.model.entity.Usuario;
@@ -27,6 +28,7 @@ public class DispositivoServiceImpl implements DispositivoService {
     }
 
     @Override
+    @Transactional
     public Dispositivo registerOrUpdate(String fcmToken, String plataforma, String modelo, String osVersion, Long usuarioId) {
         if (fcmToken == null || fcmToken.isBlank()) throw new IllegalArgumentException("fcmToken is required");
 
