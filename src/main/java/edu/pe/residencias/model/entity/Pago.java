@@ -71,7 +71,7 @@ public class Pago {
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.fechaPago == null) {
-            this.fechaPago = java.time.LocalDateTime.now();
+            this.fechaPago = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
     }
 }

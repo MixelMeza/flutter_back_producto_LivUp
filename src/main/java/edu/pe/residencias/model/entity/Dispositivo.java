@@ -61,13 +61,13 @@ public class Dispositivo {
 
     @PrePersist
     public void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
+        updatedAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
         if (activo == null) activo = true;
     }
 
     @PreUpdate
     public void preUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
     }
 }

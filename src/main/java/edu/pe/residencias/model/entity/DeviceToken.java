@@ -53,12 +53,12 @@ public class DeviceToken {
     
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
+        updatedAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
     }
     
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
     }
 }

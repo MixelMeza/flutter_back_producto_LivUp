@@ -99,7 +99,7 @@ public class Residencia {
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.createdAt == null) {
-            this.createdAt = java.time.LocalDateTime.now();
+            this.createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
     }
 

@@ -35,7 +35,7 @@ public class SolicitudAlojamiento {
     @jakarta.persistence.PrePersist
     public void prePersist() {
         if (this.fechaSolicitud == null) {
-            this.fechaSolicitud = java.time.LocalDateTime.now();
+            this.fechaSolicitud = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
     }
 

@@ -76,7 +76,7 @@ public class DataInitializer implements CommandLineRunner {
                         px.setNotas(null);
                         px.setSexo(null);
                         px.setTelefonoApoderado(null);
-                        px.setCreatedAt(LocalDateTime.now());
+                        px.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
                         return personaRepository.save(px);
                     });
 
@@ -91,7 +91,7 @@ public class DataInitializer implements CommandLineRunner {
                 u.setPassword(passwordEncoder.encode(rawPassword));
                 u.setEmailVerificado(true);
                 u.setEstado(UsuarioEstado.ACTIVO);
-                u.setCreatedAt(LocalDateTime.now());
+                u.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
                 // set role admin
                 Rol adminRol = rolRepository.findByNombre("admin").orElse(null);
                 u.setRol(adminRol);

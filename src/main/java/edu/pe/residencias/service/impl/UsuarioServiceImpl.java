@@ -103,7 +103,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         p.setNotas(dto.getNotas());
         p.setSexo(dto.getSexo());
         p.setTelefonoApoderado(dto.getTelefono_apoderado());
-        p.setCreatedAt(LocalDateTime.now());
+        p.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
         personaRepository.save(p);
 
         Usuario u = new Usuario();
@@ -122,7 +122,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         } else {
             u.setEstado(UsuarioEstado.fromValor(dto.getEstado()));
         }
-        u.setCreatedAt(LocalDateTime.now());
+        u.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
 
         Rol rol = null;
         if (dto.getRol_id() != null) {
@@ -146,8 +146,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                 edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
                 vt.setToken(token);
                 vt.setUsuario(saved);
-                vt.setCreatedAt(LocalDateTime.now());
-                vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+                vt.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+                vt.setExpiresAt(edu.pe.residencias.util.DateTimeUtil.nowLima().plusHours(24));
                 vt.setUsed(false);
                 verificationTokenRepository.save(vt);
 
@@ -320,7 +320,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         Persona p = u.getPersona();
         if (p == null) {
             p = new Persona();
-            p.setCreatedAt(java.time.LocalDateTime.now());
+            p.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
         }
         if (dto.getNombre() != null)
             p.setNombre(dto.getNombre());

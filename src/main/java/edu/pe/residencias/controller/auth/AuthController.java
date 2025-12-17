@@ -140,7 +140,7 @@ public class AuthController {
                 html = buildHtmlPage("Token ya usado", "Este enlace ya fue utilizado para verificar el correo.", false);
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.TEXT_HTML).body(html);
             }
-            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(LocalDateTime.now())) {
+            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(edu.pe.residencias.util.DateTimeUtil.nowLima())) {
                 html = buildHtmlPage("Token expirado", "El enlace de verificación expiró. Solicita uno nuevo.", false);
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).contentType(MediaType.TEXT_HTML).body(html);
             }
@@ -232,8 +232,8 @@ public class AuthController {
             edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
             vt.setToken(verificationToken);
             vt.setUsuario(user);
-            vt.setCreatedAt(LocalDateTime.now());
-            vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+            vt.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+            vt.setExpiresAt(edu.pe.residencias.util.DateTimeUtil.nowLima().plusHours(24));
             vt.setUsed(false);
             verificationTokenRepository.save(vt);
 
@@ -277,7 +277,7 @@ public class AuthController {
             if (Boolean.TRUE.equals(vt.getUsed())) {
                 return new ResponseEntity<>(new ErrorResponse("El token ya fue usado"), HttpStatus.BAD_REQUEST);
             }
-            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(LocalDateTime.now())) {
+            if (vt.getExpiresAt() != null && vt.getExpiresAt().isBefore(edu.pe.residencias.util.DateTimeUtil.nowLima())) {
                 return new ResponseEntity<>(new ErrorResponse("El token ha expirado"), HttpStatus.BAD_REQUEST);
             }
 
@@ -377,8 +377,8 @@ public class AuthController {
             edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
             vt.setToken(verificationToken);
             vt.setUsuario(user);
-            vt.setCreatedAt(LocalDateTime.now());
-            vt.setExpiresAt(LocalDateTime.now().plusHours(24));
+            vt.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+            vt.setExpiresAt(edu.pe.residencias.util.DateTimeUtil.nowLima().plusHours(24));
             vt.setUsed(false);
             verificationTokenRepository.save(vt);
 
@@ -516,7 +516,7 @@ public class AuthController {
                     invalidatedTokenRepository.findByToken(token).orElseGet(() -> {
                         edu.pe.residencias.model.entity.InvalidatedToken it = new edu.pe.residencias.model.entity.InvalidatedToken();
                         it.setToken(token);
-                        it.setCreatedAt(java.time.LocalDateTime.now());
+                        it.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
                         return invalidatedTokenRepository.save(it);
                     });
                 }

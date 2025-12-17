@@ -36,7 +36,7 @@ public class EmailStartupVerifier {
         String body = "Este es un correo de verificación enviado automáticamente al iniciar la aplicación.\n"
                 + "Aplicación: " + System.getProperty("spring.application.name", "residencias-backend") + "\n"
                 + "Desde: " + fromAddress + "\n"
-                + "Fecha: " + LocalDateTime.now().toString() + "\n\n"
+                + "Fecha: " + edu.pe.residencias.util.DateTimeUtil.nowLima().toString() + "\n\n"
                 + "Si recibes este correo significa que la funcionalidad de envío de correos está operativa.";
 
         try {

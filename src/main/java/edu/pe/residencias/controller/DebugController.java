@@ -43,7 +43,7 @@ public class DebugController {
         String subject = "Verificación completa: envío de correos funcionando";
         String text = "Este es un correo de verificación enviado manualmente desde el endpoint /api/debug/send-test-email.\n"
                 + "Desde: " + fromAddress + "\n"
-                + "Fecha: " + LocalDateTime.now().toString() + "\n\n"
+                + "Fecha: " + edu.pe.residencias.util.DateTimeUtil.nowLima().toString() + "\n\n"
                 + "Si recibes este correo significa que la funcionalidad de envío de correos está operativa.";
 
         try {

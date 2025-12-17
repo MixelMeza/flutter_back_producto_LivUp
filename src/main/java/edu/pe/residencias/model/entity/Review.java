@@ -50,7 +50,7 @@ public class Review {
         @jakarta.persistence.PrePersist
         public void prePersist() {
             if (this.fechaReview == null) {
-                this.fechaReview = java.time.LocalDateTime.now();
+                this.fechaReview = edu.pe.residencias.util.DateTimeUtil.nowLima();
             }
         }
 }

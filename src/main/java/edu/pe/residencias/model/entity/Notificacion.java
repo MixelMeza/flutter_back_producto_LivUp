@@ -58,6 +58,6 @@ public class Notificacion {
     
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
     }
 }

@@ -50,7 +50,7 @@ public class Abono {
         @jakarta.persistence.PrePersist
         public void prePersist() {
             if (this.fecha == null) {
-                this.fecha = java.time.LocalDateTime.now();
+                this.fecha = edu.pe.residencias.util.DateTimeUtil.nowLima();
             }
             if (this.estado == null) {
                 this.estado = edu.pe.residencias.model.enums.AbonoEstado.REGISTRADO;

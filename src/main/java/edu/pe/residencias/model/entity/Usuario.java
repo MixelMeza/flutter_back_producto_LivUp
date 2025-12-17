@@ -55,7 +55,7 @@ public class Usuario {
             this.uuid = UUID.randomUUID().toString();
         }
         if (this.createdAt == null) {
-            this.createdAt = java.time.LocalDateTime.now();
+            this.createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
         // Default estado for new users
         if (this.estado == null) {
