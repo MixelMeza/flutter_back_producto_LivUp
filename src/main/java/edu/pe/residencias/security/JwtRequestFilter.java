@@ -10,12 +10,16 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import edu.pe.residencias.repository.InvalidatedTokenRepository;
 
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private InvalidatedTokenRepository invalidatedTokenRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -37,6 +41,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring("Bearer ".length()).trim();
         try {
+            // If token was invalidated (logout), reject immediately
+            if (invalidatedTokenRepository.findByToken(token).isPresent()) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("Token invalidated");
+                return;
+            }
+
             var claims = jwtUtil.parseToken(token);
             // expose claims for controllers if needed
             request.setAttribute("jwtClaims", claims);

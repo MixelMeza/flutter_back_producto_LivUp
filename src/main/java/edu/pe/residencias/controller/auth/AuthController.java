@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Optional;
+import java.util.Map;
 
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
@@ -38,6 +39,9 @@ public class AuthController {
     private AccesoRepository accesoRepository;
 
     @Autowired
+    private edu.pe.residencias.service.DispositivoService dispositivoService;
+
+    @Autowired
     private edu.pe.residencias.repository.VerificationTokenRepository verificationTokenRepository;
 
     @Autowired
@@ -45,6 +49,9 @@ public class AuthController {
 
     @Autowired
     private edu.pe.residencias.repository.PersonaRepository personaRepository;
+
+    @Autowired
+    private edu.pe.residencias.repository.InvalidatedTokenRepository invalidatedTokenRepository;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest req, HttpServletRequest request) {
@@ -75,92 +82,35 @@ public class AuthController {
             String roleName = u.getRol() == null ? null : u.getRol().getNombre();
             String token = jwtUtil.generateToken(java.util.UUID.fromString(u.getUuid()), u.getUsername(), roleName);
 
-            // register acceso (device + ip) -- use Peru timezone and better device detection
+            // register acceso (device) using DispositivoService + create acceso event
             try {
                 String ip = request.getHeader("X-Forwarded-For");
-                if (ip == null || ip.isEmpty()) {
-                    ip = request.getRemoteAddr();
-                }
+                if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
 
-                // Prefer client-sent device headers if available (mobile/Flutter can send these)
-                String deviceModel = request.getHeader("X-Device-Model");
-                String deviceId = request.getHeader("X-Device-Id");
-                String deviceName = request.getHeader("X-Device-Name");
-                String clientInfo = request.getHeader("X-Client-Info");
-                String userAgent = request.getHeader("User-Agent");
+                String fcmToken = req.getFcmToken();
+                String plataforma = req.getPlataforma();
+                String modelo = req.getModelo();
+                String osVersion = req.getOsVersion();
 
-                String dispositivo = null;
-                if (deviceModel != null && !deviceModel.isBlank()) {
-                    dispositivo = deviceModel;
-                    if (deviceName != null && !deviceName.isBlank()) dispositivo += " (" + deviceName + ")";
-                } else if (clientInfo != null && !clientInfo.isBlank()) {
-                    dispositivo = clientInfo;
-                } else if (userAgent != null && !userAgent.isBlank()) {
-                    // Try to parse common patterns to get device info; fall back to full UA
-                    String ua = userAgent;
-                    // If UA looks generic (dart), include additional headers if present
-                    if (ua.toLowerCase().contains("dart") || ua.toLowerCase().contains("flutter")) {
-                        // prefer deviceId/name if present
-                        if (deviceId != null && !deviceId.isBlank()) {
-                            dispositivo = "Flutter (deviceId=" + deviceId + ")";
-                        } else if (deviceName != null && !deviceName.isBlank()) {
-                            dispositivo = "Flutter (" + deviceName + ")";
-                        } else {
-                            dispositivo = ua;
-                        }
-                    } else {
-                        dispositivo = ua;
-                    }
-                } else {
-                    dispositivo = "unknown";
-                }
-
-                // Read notification token header if provided
-                String notificationToken = request.getHeader("X-Notification-Token");
-
-                // Try to find an existing Acceso for this user+device and update it instead of creating duplicates
-                Acceso acceso = null;
+                edu.pe.residencias.model.entity.Dispositivo dispositivoEntity = null;
                 try {
-                    if (deviceId != null && !deviceId.isBlank()) {
-                        var existingByDeviceId = accesoRepository.findFirstByUsuarioIdAndDeviceId(u.getId(), deviceId);
-                        if (existingByDeviceId.isPresent()) {
-                            acceso = existingByDeviceId.get();
-                        }
+                    if (fcmToken != null && !fcmToken.isBlank()) {
+                        dispositivoEntity = dispositivoService.registerOrUpdate(fcmToken, plataforma, modelo, osVersion, u.getId());
                     }
-                    if (acceso == null) {
-                        var existingExact = accesoRepository.findFirstByUsuarioIdAndDispositivo(u.getId(), dispositivo);
-                        if (existingExact.isPresent()) {
-                            acceso = existingExact.get();
-                        }
-                    }
-                } catch (Exception repoEx) {
-                    // If repository lookup fails for any reason, fall back to creating a new Acceso
-                    System.err.println("[AuthController] Warning: acceso lookup failed: " + repoEx.getMessage());
+                } catch (Exception dEx) {
+                    System.err.println("[AuthController] Warning: dispositivo register failed: " + dEx.getMessage());
                 }
 
-                if (acceso != null) {
-                    // Update existing record
-                    acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
-                    acceso.setIpAcceso(ip);
-                    acceso.setDispositivo(dispositivo);
-                    acceso.setDeviceId(deviceId);
-                    acceso.setTokenNotificacion(notificationToken);
-                    accesoRepository.save(acceso);
-                    System.out.println("[AuthController] Updated Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
-                } else {
-                    // Create new acceso record for this user+device
-                    acceso = new Acceso();
-                    acceso.setUsuario(u);
-                    acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
-                    acceso.setIpAcceso(ip);
-                    acceso.setDispositivo(dispositivo);
-                    acceso.setDeviceId(deviceId);
-                    acceso.setTokenNotificacion(notificationToken);
-                    accesoRepository.save(acceso);
-                    System.out.println("[AuthController] Created new Acceso id=" + acceso.getId() + " for usuarioId=" + u.getId());
-                }
+                // create acceso event (history)
+                Acceso acceso = new Acceso();
+                acceso.setUsuario(u);
+                acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
+                acceso.setTipo("LOGIN");
+                acceso.setIpAcceso(ip);
+                acceso.setDispositivoRel(dispositivoEntity);
+                accesoRepository.save(acceso);
+                System.out.println("[AuthController] Created Acceso event id=" + acceso.getId() + " usuarioId=" + u.getId() + " dispositivoId=" + (dispositivoEntity == null ? "null" : dispositivoEntity.getId()));
             } catch (Exception ex) {
-                // don't fail login if access logging fails, but log to console
                 System.err.println("[AuthController] Failed to log acceso: " + ex.getMessage());
             }
 
@@ -493,6 +443,89 @@ public class AuthController {
         } catch (Exception e) {
             e.printStackTrace();
             return new ResponseEntity<>(new ErrorResponse("Error interno del servidor"), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@RequestBody(required = false) java.util.Map<String, String> body, HttpServletRequest request) {
+        try {
+            // Extract user from JWT
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return new ResponseEntity<>(new ErrorResponse("Token de autorización requerido"), HttpStatus.UNAUTHORIZED);
+            }
+
+            String token = authHeader.substring(7);
+            Claims claims = jwtUtil.parseToken(token);
+            String username = claims.get("user", String.class);
+
+            Optional<Usuario> userOpt = usuarioService.findByUsernameOrEmail(username);
+            if (userOpt.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("Usuario no encontrado"), HttpStatus.NOT_FOUND);
+            }
+
+            Usuario user = userOpt.get();
+
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
+
+            String fcmToken = null;
+            if (body != null) {
+                fcmToken = body.get("fcmToken");
+            }
+
+            edu.pe.residencias.model.entity.Dispositivo dispositivoEntity = null;
+            try {
+                if (fcmToken != null && !fcmToken.isBlank()) {
+                    dispositivoEntity = dispositivoService.findByFcmToken(fcmToken).orElse(null);
+                }
+            } catch (Exception dEx) {
+                System.err.println("[AuthController] Warning: dispositivo lookup failed on logout: " + dEx.getMessage());
+            }
+
+            // Create Acceso event for logout
+            try {
+                Acceso acceso = new Acceso();
+                acceso.setUsuario(user);
+                acceso.setUltimaSesion(java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Lima")).toLocalDateTime());
+                acceso.setTipo("LOGOUT");
+                acceso.setIpAcceso(ip);
+                acceso.setDispositivoRel(dispositivoEntity);
+                accesoRepository.save(acceso);
+                System.out.println("[AuthController] Created Acceso (logout) id=" + acceso.getId() + " usuarioId=" + user.getId());
+            } catch (Exception ex) {
+                System.err.println("[AuthController] Failed to log acceso (logout): " + ex.getMessage());
+            }
+
+            // Do NOT delete/unregister the dispositivo on logout.
+            // Keeping dispositivo records ensures the FCM token remains tied to the physical device.
+            // Token reassignment (if a different user logs in on the same device) is handled by registerOrUpdate on login.
+            if (dispositivoEntity != null) {
+                System.out.println("[AuthController] Logout: dispositivo preserved for token=" + dispositivoEntity.getFcmToken());
+            }
+
+            // Invalidate JWT token (store in invalidated tokens table) so requests using it are rejected
+            try {
+                if (token != null && !token.isBlank()) {
+                    // avoid duplicate entries
+                    invalidatedTokenRepository.findByToken(token).orElseGet(() -> {
+                        edu.pe.residencias.model.entity.InvalidatedToken it = new edu.pe.residencias.model.entity.InvalidatedToken();
+                        it.setToken(token);
+                        it.setCreatedAt(java.time.LocalDateTime.now());
+                        return invalidatedTokenRepository.save(it);
+                    });
+                }
+            } catch (Exception invEx) {
+                System.err.println("[AuthController] Warning: failed to persist invalidated token: " + invEx.getMessage());
+            }
+
+            return new ResponseEntity<>(Map.of("message", "Sesión cerrada correctamente"), HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException jwtEx) {
+            System.err.println("[AuthController] Error JWT: " + jwtEx.getMessage());
+            return new ResponseEntity<>(new ErrorResponse("Token de autenticación inválido o expirado"), HttpStatus.UNAUTHORIZED);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Error al cerrar sesión"), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

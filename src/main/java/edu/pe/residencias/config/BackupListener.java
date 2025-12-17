@@ -15,8 +15,15 @@ public class BackupListener {
     @Autowired
     private DatabaseBackupService backupService;
 
+    @org.springframework.beans.factory.annotation.Value("${backups.auto.enabled:false}")
+    private boolean backupsAutoEnabled;
+
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
+        if (!backupsAutoEnabled) {
+            logger.info("Startup backup disabled by configuration (backups.auto.enabled=false)");
+            return;
+        }
         try {
             logger.info("Triggering startup DB backup");
             backupService.backupNow("startup");
@@ -27,6 +34,10 @@ public class BackupListener {
 
     @EventListener(ContextClosedEvent.class)
     public void onShutdown() {
+        if (!backupsAutoEnabled) {
+            logger.info("Shutdown backup disabled by configuration (backups.auto.enabled=false)");
+            return;
+        }
         try {
             logger.info("Triggering shutdown DB backup");
             backupService.backupNow("shutdown");

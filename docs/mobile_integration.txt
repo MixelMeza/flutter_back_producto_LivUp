@@ -1,0 +1,156 @@
+Mobile integration guide - LivUp backend
+
+Resumen rápido
+- Enviar información del dispositivo y token FCM al hacer login o inmediatamente después.
+- Guardar el JWT que devuelve el backend y usarlo en la cabecera `Authorization: Bearer <JWT>` para llamadas protegidas.
+- Usar HTTPS siempre.
+
+Campos esperados por el backend
+1) Login: POST /api/auth/login
+- Content-Type: application/json
+- Body JSON (campos que acepta el backend):
+  - username: string (email o username)
+  - password: string
+  - fcmToken: string (opcional pero recomendado)
+  - plataforma: string ("ANDROID" | "IOS")
+  - modelo: string (ej. "Pixel 6", "iPhone 14")
+  - osVersion: string (ej. "13", "14.4") - opcional
+
+Ejemplo JSON (login):
+{
+  "username": "juan@example.com",
+  "password": "miPasswordSeguro",
+  "fcmToken": "eJhb..._FCM_TOKEN_VALUE",
+  "plataforma": "ANDROID",
+  "modelo": "Pixel 6",
+  "osVersion": "13"
+}
+
+Comportamiento del backend al recibir fcmToken en login:
+- Llama a DispositivoService.registerOrUpdate(...) para crear o reasignar el registro en la tabla `dispositivos`.
+- Crea un evento Acceso con la relación `dispositivoRel` y guarda `ultimaSesion` en zona `America/Lima`.
+
+2) Registrar token (si no lo envias en login o para actualizaciones):
+POST /api/notifications/register-token
+- Headers: Authorization: Bearer <JWT>
+- Body JSON:
+  - fcmToken: string (requerido)
+  - deviceType: string ("ANDROID" | "IOS")
+  - deviceName: string (nombre legible del dispositivo)
+
+Ejemplo JSON (register-token):
+{
+  "fcmToken": "eJhb..._FCM_TOKEN_VALUE",
+  "deviceType": "ANDROID",
+  "deviceName": "Pixel 6"
+}
+
+3) Eliminar token (logout):
+DELETE /api/notifications/unregister-token
+- Body JSON:
+  - fcmToken: string
+
+Ejemplo JSON (unregister-token):
+{ "fcmToken": "eJhb..._FCM_TOKEN_VALUE" }
+
+Flujo recomendado en la app móvil
+1. Al iniciar o al hacer login:
+   - Obtener FCM token: p.ej. FirebaseMessaging.instance.getToken().
+   - Hacer login con username/password. Incluir fcmToken, plataforma, modelo, osVersion en el body.
+   - Alternativa: hacer login primero, guardar JWT, luego llamar a POST /api/notifications/register-token con JWT y el fcmToken.
+2. Guardar JWT en almacenamiento seguro (Keychain/Keystore/SecureStorage).
+3. Cuando FCM renueve el token (onTokenRefresh), llamar a register-token para actualizar.
+4. Al hacer logout, llamar a unregister-token y borrar JWT del almacenamiento.
+
+cURL ejemplos
+- Login con device info:
+curl -X POST "https://api.tu-dominio.com/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"juan@example.com","password":"miPass","fcmToken":"FCM_TOKEN_AQUI","plataforma":"ANDROID","modelo":"Pixel 6","osVersion":"13"}'
+
+- Registrar token (usa JWT obtenido en login):
+curl -X POST "https://api.tu-dominio.com/api/notifications/register-token" \
+  -H "Authorization: Bearer <JWT_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"fcmToken":"FCM_TOKEN_AQUI","deviceType":"ANDROID","deviceName":"Pixel 6"}'
+
+- Eliminar token (logout):
+curl -X DELETE "https://api.tu-dominio.com/api/notifications/unregister-token" \
+  -H "Content-Type: application/json" \
+  -d '{"fcmToken":"FCM_TOKEN_AQUI"}'
+
+Snippets útiles
+- Flutter (Dart) - obtener token y registrar:
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
+
+final fcmToken = await FirebaseMessaging.instance.getToken();
+
+// Login + enviar device info
+final loginRes = await http.post(Uri.parse('https://api.tu-dominio.com/api/auth/login'),
+  headers: {'Content-Type': 'application/json'},
+  body: jsonEncode({
+    'username': email,
+    'password': password,
+    'fcmToken': fcmToken,
+    'plataforma': 'ANDROID',
+    'modelo': deviceModel,
+    'osVersion': osVersion
+  })
+);
+
+// Registrar token explícitamente
+await http.post(Uri.parse('https://api.tu-dominio.com/api/notifications/register-token'),
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $jwt'
+  },
+  body: jsonEncode({ 'fcmToken': fcmToken, 'deviceType': 'ANDROID', 'deviceName': deviceModel })
+);
+
+- Android (Kotlin) - ejemplo OkHttp (esquema):
+val json = """
+{ "username":"juan@example.com","password":"miPass","fcmToken":"$fcmToken","plataforma":"ANDROID","modelo":"Pixel 6","osVersion":"13" }
+""".trimIndent()
+
+val request = Request.Builder()
+  .url("https://api.tu-dominio.com/api/auth/login")
+  .post(RequestBody.create(MediaType.get("application/json"), json))
+  .build()
+
+- iOS (Swift) - URLSession (esquema):
+var request = URLRequest(url: URL(string: "https://api.tu-dominio.com/api/auth/login")!)
+request.httpMethod = "POST"
+request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+let body: [String:Any] = ["username": email, "password": password, "fcmToken": fcmToken, "plataforma": "IOS", "modelo": deviceModel, "osVersion": osVersion]
+request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+Manejo de refresh de token FCM
+- Siempre llamar a register-token cuando el token cambie.
+- Si recibe 401 del backend, solicitar re-login y volver a registrar.
+
+Manejo de errores / códigos
+- 200 OK: éxito
+- 400 Bad Request: falta parámetro o formato inválido
+- 401 Unauthorized: JWT inválido o expirado — re-login requerido
+- 500 Server Error: reintentar con backoff y reportar a backend
+
+Buenas prácticas
+- Enviar el token completo (no truncarlo)
+- Normalizar `plataforma` a "ANDROID" o "IOS"
+- Reintentar con backoff en fallos transitorios
+- No enviar tokens por query string; usar body
+- Forzar HTTPS y validación de certificados
+
+Notas internas para móvil
+- `dispositivos.fcm_token` es único; el backend reasignará un dispositivo a un usuario si el mismo token aparece en otro login.
+- El backend guarda `Acceso.ultimaSesion` en zona `America/Lima`.
+
+QA sugerido
+1) Login con token y verificar que `dispositivos` tiene entrada para el usuario.
+2) Simular onTokenRefresh (nuevo token) y verificar que el dispositivo se actualiza.
+3) Logout: llamar unregister-token y verificar que el token se elimina.
+4) Intentar register-token con JWT inválido y verificar 401.
+
+Contacto
+- Si necesitas más ejemplos o quieres que ponga esto en Markdown o en un README, dime y lo creo.

@@ -22,17 +22,29 @@ import edu.pe.residencias.model.entity.DeviceToken;
 import edu.pe.residencias.model.entity.Usuario;
 import edu.pe.residencias.repository.DeviceTokenRepository;
 import edu.pe.residencias.repository.NotificacionRepository;
+import edu.pe.residencias.repository.AccesoRepository;
 import edu.pe.residencias.service.NotificationService;
 import jakarta.annotation.PostConstruct;
+import edu.pe.residencias.model.entity.Dispositivo;
+import edu.pe.residencias.model.enums.UsuarioEstado;
 
 @Service
 public class NotificationServiceImpl implements NotificationService {
     
     @Autowired
-    private DeviceTokenRepository deviceTokenRepository;
+    private DeviceTokenRepository deviceTokenRepository; // legacy - will prefer Dispositivo
+
+    @Autowired
+    private edu.pe.residencias.repository.DispositivoRepository dispositivoRepository;
+
+    @Autowired
+    private edu.pe.residencias.service.DispositivoService dispositivoService;
     
     @Autowired
     private NotificacionRepository notificacionRepository;
+    
+    @Autowired
+    private AccesoRepository accesoRepository;
     
     @Value("${firebase.config.path:#{null}}")
     private String firebaseConfigPath;
@@ -70,70 +82,167 @@ public class NotificationServiceImpl implements NotificationService {
             System.out.println("[NotificationService] Firebase no inicializado. Omitiendo push notification.");
             return;
         }
-        
-        List<DeviceToken> tokens = deviceTokenRepository.findByUsuarioIdAndIsActiveTrue(usuario.getId());
-        
-        for (DeviceToken deviceToken : tokens) {
-            try {
-                Message message = Message.builder()
-                    .setToken(deviceToken.getFcmToken())
-                    .setNotification(Notification.builder()
-                        .setTitle(titulo)
-                        .setBody(mensaje)
-                        .build())
-                    .putAllData(data != null ? data : new HashMap<>())
-                    .build();
-                
-                String response = FirebaseMessaging.getInstance().send(message);
-                System.out.println("[NotificationService] Push enviado: " + response);
-            } catch (Exception e) {
-                System.err.println("[NotificationService] Error al enviar push a token " + deviceToken.getFcmToken() + ": " + e.getMessage());
-                // Si el token es inválido, marcarlo como inactivo
-                if (e.getMessage().contains("invalid") || e.getMessage().contains("not-found")) {
-                    deviceToken.setIsActive(false);
-                    deviceTokenRepository.save(deviceToken);
-                }
+        // Do not send to suspended users
+        if (usuario == null || usuario.getEstado() == null || usuario.getEstado() != UsuarioEstado.ACTIVO) {
+            System.out.println("[NotificationService] Usuario no activo o nulo, omitiendo push: " + (usuario == null ? "null" : usuario.getId()));
+            return;
+        }
+        // Prefer using `dispositivos` table for active device tokens
+        List<Dispositivo> devices = dispositivoRepository.findByUsuarioIdAndActivoTrue(usuario.getId());
+        // If none, fallback to legacy device tokens
+        if (devices == null || devices.isEmpty()) {
+            List<DeviceToken> tokens = deviceTokenRepository.findByUsuarioIdAndIsActiveTrue(usuario.getId());
+            if (tokens == null || tokens.isEmpty()) return;
+            for (DeviceToken deviceToken : tokens) {
+                sendToTokenWithRetries(deviceToken.getFcmToken(), titulo, mensaje, data, null);
             }
+            return;
+        }
+
+        for (Dispositivo device : devices) {
+            if (device == null) continue;
+            if (Boolean.FALSE.equals(device.getActivo()) || Boolean.TRUE.equals(device.getBloqueado())) continue;
+            sendToTokenWithRetries(device.getFcmToken(), titulo, mensaje, data, device);
         }
     }
     
     @Override
     public void sendPushNotificationToMultipleUsers(List<Usuario> usuarios, String titulo, String mensaje, Map<String, String> data) {
-        for (Usuario usuario : usuarios) {
-            sendPushNotification(usuario, titulo, mensaje, data);
+        if (!firebaseInitialized) {
+            System.out.println("[NotificationService] Firebase no inicializado. Omitiendo push notification (multi).");
+            return;
         }
+        // Build unique set of tokens for active devices of given users (do not use accesos)
+        java.util.Set<String> tokensToSend = new java.util.HashSet<>();
+        java.util.Map<String, Dispositivo> tokenToDevice = new java.util.HashMap<>();
+
+        for (Usuario usuario : usuarios) {
+            if (usuario == null || usuario.getEstado() == null || usuario.getEstado() != UsuarioEstado.ACTIVO) {
+                System.out.println("[NotificationService] Skipping inactive user for multi-send: " + (usuario == null ? "null" : usuario.getId()));
+                continue;
+            }
+            try {
+                List<Dispositivo> devices = dispositivoRepository.findByUsuarioIdAndActivoTrue(usuario.getId());
+                if (devices != null) {
+                    for (Dispositivo d : devices) {
+                        if (d == null) continue;
+                        if (Boolean.FALSE.equals(d.getActivo()) || Boolean.TRUE.equals(d.getBloqueado())) continue;
+                        if (d.getFcmToken() == null || d.getFcmToken().isBlank()) continue;
+                        tokensToSend.add(d.getFcmToken());
+                        tokenToDevice.put(d.getFcmToken(), d);
+                    }
+                }
+                // fallback to legacy tokens for this user if needed
+                List<DeviceToken> dtokens = deviceTokenRepository.findByUsuarioIdAndIsActiveTrue(usuario.getId());
+                if (dtokens != null) {
+                    for (DeviceToken dt : dtokens) {
+                        if (dt.getFcmToken() != null && !dt.getFcmToken().isBlank()) tokensToSend.add(dt.getFcmToken());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[NotificationService] Error collecting devices for user " + usuario.getId() + ": " + e.getMessage());
+            }
+        }
+
+        // Send one message per unique token
+        for (String token : tokensToSend) {
+            Dispositivo d = tokenToDevice.get(token);
+            sendToTokenWithRetries(token, titulo, mensaje, data, d);
+        }
+    }
+
+    // Helper: send with retry and mark device inactive on permanent errors
+    private void sendToTokenWithRetries(String token, String titulo, String mensaje, Map<String, String> data, Dispositivo device) {
+        if (token == null || token.isBlank()) return;
+        int attempts = 0;
+        int maxAttempts = 3;
+        long backoff = 500; // ms
+        while (attempts < maxAttempts) {
+            attempts++;
+            try {
+                Message.Builder mb = Message.builder()
+                        .setToken(token)
+                        .setNotification(Notification.builder().setTitle(titulo).setBody(mensaje).build());
+                if (data != null && !data.isEmpty()) mb.putAllData(data);
+                Message message = mb.build();
+                String response = FirebaseMessaging.getInstance().send(message);
+                System.out.println("[NotificationService] Push enviado a token=" + token + " response=" + response);
+                return;
+            } catch (com.google.firebase.messaging.FirebaseMessagingException fme) {
+                String code = fme.getErrorCode() == null ? "" : fme.getErrorCode().name();
+                String msg = fme.getMessage() == null ? "" : fme.getMessage().toLowerCase();
+                // Permanent errors: invalid argument / registration token not registered
+                if (msg.contains("notregistered") || msg.contains("not registered") || msg.contains("registration-token-not-registered") || msg.contains("invalid-argument") || code.equalsIgnoreCase("INVALID_ARGUMENT") || code.equalsIgnoreCase("NOT_FOUND")) {
+                    // mark device inactive if available
+                    if (device != null) {
+                        try {
+                            device.setActivo(false);
+                            dispositivoRepository.save(device);
+                            System.out.println("[NotificationService] Marcado dispositivo.activo=false por token inválido: " + token);
+                        } catch (Exception ex) { System.err.println("[NotificationService] Error marcando dispositivo inactivo: " + ex.getMessage()); }
+                    } else {
+                        // fallback: update legacy token state
+                        try { deviceTokenRepository.findByFcmToken(token).ifPresent(dt -> { dt.setIsActive(false); deviceTokenRepository.save(dt); }); } catch (Exception inner) {}
+                    }
+                    return;
+                }
+                // Transient errors -> retry
+                if (msg.contains("unavailable") || msg.contains("internal") || code.equalsIgnoreCase("UNAVAILABLE") || code.equalsIgnoreCase("INTERNAL")) {
+                    try { Thread.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    backoff *= 2;
+                    continue;
+                }
+                // default: do not retry
+                System.err.println("[NotificationService] FirebaseMessagingException non-retry for token=" + token + ", msg=" + fme.getMessage());
+                return;
+            } catch (Exception e) {
+                // treat as transient network error -> retry a few times
+                System.err.println("[NotificationService] Error sending push to token=" + token + ", attempt=" + attempts + ", err=" + e.getMessage());
+                try { Thread.sleep(backoff); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                backoff *= 2;
+            }
+        }
+        System.err.println("[NotificationService] Exhausted retries for token=" + token);
     }
     
     @Override
     @Transactional
     public void registerDeviceToken(Usuario usuario, String fcmToken, String deviceType, String deviceName) {
-        // Verificar si el token ya existe
-        var existingToken = deviceTokenRepository.findByFcmToken(fcmToken);
-        
-        if (existingToken.isPresent()) {
-            // Actualizar el token existente
-            DeviceToken token = existingToken.get();
-            token.setUsuario(usuario);
-            token.setDeviceType(deviceType);
-            token.setDeviceName(deviceName);
-            token.setIsActive(true);
-            deviceTokenRepository.save(token);
-        } else {
-            // Crear nuevo token
-            DeviceToken newToken = new DeviceToken();
-            newToken.setUsuario(usuario);
-            newToken.setFcmToken(fcmToken);
-            newToken.setDeviceType(deviceType);
-            newToken.setDeviceName(deviceName);
-            newToken.setIsActive(true);
-            deviceTokenRepository.save(newToken);
+        // Prefer creating/updating in dispositivos table
+        try {
+            // Use DispositivoService to centralize creation/update/reassignment
+            Long usuarioId = usuario != null ? usuario.getId() : null;
+            dispositivoService.registerOrUpdate(fcmToken, deviceType, deviceName, null, usuarioId);
+        } catch (Exception e) {
+            // fallback to legacy device token table
+            var existingToken = deviceTokenRepository.findByFcmToken(fcmToken);
+            if (existingToken.isPresent()) {
+                DeviceToken token = existingToken.get();
+                token.setUsuario(usuario);
+                token.setDeviceType(deviceType);
+                token.setDeviceName(deviceName);
+                token.setIsActive(true);
+                deviceTokenRepository.save(token);
+            } else {
+                DeviceToken newToken = new DeviceToken();
+                newToken.setUsuario(usuario);
+                newToken.setFcmToken(fcmToken);
+                newToken.setDeviceType(deviceType);
+                newToken.setDeviceName(deviceName);
+                newToken.setIsActive(true);
+                deviceTokenRepository.save(newToken);
+            }
         }
     }
     
     @Override
     @Transactional
     public void unregisterDeviceToken(String fcmToken) {
-        deviceTokenRepository.deleteByFcmToken(fcmToken);
+        try {
+            dispositivoService.findByFcmToken(fcmToken).ifPresent(d -> dispositivoService.deleteById(d.getId()));
+        } catch (Exception e) {
+            deviceTokenRepository.deleteByFcmToken(fcmToken);
+        }
     }
     
     @Override

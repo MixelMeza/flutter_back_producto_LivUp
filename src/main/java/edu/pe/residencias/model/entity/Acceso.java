@@ -39,13 +39,14 @@ public class Acceso {
 
     @Column(name = "ip_acceso")
     private String ipAcceso;
-
-    @Column(name = "dispositivo")
-    private String dispositivo;
-
-    @Column(name = "device_id")
-    private String deviceId;
-
-    @Column(name = "token_notificacion")
-    private String tokenNotificacion;
+    /**
+     * Tipo de acceso: "LOGIN" o "LOGOUT". Usado para determinar si el dispositivo
+     * está actualmente con sesión iniciada por el usuario del registro de acceso más reciente.
+     */
+    @Column(name = "tipo")
+    private String tipo;
+    // New relation to dispositivos table (nullable)
+    @ManyToOne
+    @JoinColumn(name = "dispositivo_id")
+    private Dispositivo dispositivoRel;
 }

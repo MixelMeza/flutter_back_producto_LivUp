@@ -9,12 +9,12 @@ import edu.pe.residencias.model.entity.Acceso;
 public interface AccesoRepository extends JpaRepository<Acceso, Long> {
 	java.util.Optional<Acceso> findFirstByUsuarioIdOrderByUltimaSesionDesc(Long usuarioId);
 
-	// Find an acceso for a given user where the dispositivo string contains a fragment (useful for deviceId)
-	java.util.Optional<Acceso> findFirstByUsuarioIdAndDispositivoContaining(Long usuarioId, String dispositivoFragment);
+	// Lookup by related Dispositivo (new model)
+	java.util.Optional<Acceso> findFirstByUsuarioIdAndDispositivoRelId(Long usuarioId, Long dispositivoId);
 
-	// Find by exact dispositivo string for the user
-	java.util.Optional<Acceso> findFirstByUsuarioIdAndDispositivo(Long usuarioId, String dispositivo);
+	// Lookup by dispositivo fcm token via relation
+	java.util.Optional<Acceso> findFirstByUsuarioIdAndDispositivoRelFcmToken(Long usuarioId, String fcmToken);
 
-	// Prefer lookup by device_id column when available
-	java.util.Optional<Acceso> findFirstByUsuarioIdAndDeviceId(Long usuarioId, String deviceId);
+	// Find the most recent Acceso for a given dispositivo (to determine who is currently logged in on that device)
+	java.util.Optional<Acceso> findFirstByDispositivoRelIdOrderByUltimaSesionDesc(Long dispositivoId);
 }

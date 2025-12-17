@@ -6,4 +6,9 @@ import lombok.Data;
 public class AuthRequest {
     private String username;
     private String password;
+    // Optional device info sent by frontend
+    private String fcmToken;
+    private String plataforma;
+    private String modelo;
+    private String osVersion;
 }
