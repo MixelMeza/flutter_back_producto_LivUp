@@ -5,7 +5,8 @@ public enum SolicitudEstado {
     RESERVADA("reservada"),
     ACEPTADA("aceptada"),
     RECHAZADA("rechazada"),
-    CANCELADA("cancelada");
+    CANCELADA("cancelada"),
+    VENCIDO("vencido");
 
     private final String valor;
 

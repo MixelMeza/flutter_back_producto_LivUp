@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestParam;
+import edu.pe.residencias.util.DateTimeUtil;
+import java.time.temporal.ChronoUnit;
 import edu.pe.residencias.model.entity.SolicitudAlojamiento;
 import edu.pe.residencias.service.SolicitudAlojamientoService;
 import edu.pe.residencias.model.enums.SolicitudEstado;
@@ -192,6 +195,48 @@ public class SolicitudAlojamientoController {
             return ResponseEntity.ok(out);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/vencidas")
+    public ResponseEntity<?> marcarVencidas(@RequestParam("dias") int dias,
+                                            @RequestParam(name = "actualizar", required = false, defaultValue = "false") boolean actualizar) {
+        try {
+            var all = solicitudAlojamientoService.readAll();
+            if (all == null || all.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+
+            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            var now = DateTimeUtil.nowLima();
+            for (var s : all) {
+                if (s == null || s.getFechaSolicitud() == null) continue;
+                long diff = ChronoUnit.DAYS.between(s.getFechaSolicitud().toLocalDate(), now.toLocalDate());
+                // Only consider pending or reservada solicitudes for automatic vencido
+                var estado = s.getEstado();
+                boolean eligible = estado == SolicitudEstado.PENDIENTE || estado == SolicitudEstado.RESERVADA;
+                if (diff >= dias && eligible) {
+                    java.util.Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id", s.getId());
+                    m.put("fechaSolicitud", s.getFechaSolicitud());
+                    m.put("estadoActual", s.getEstado());
+                    m.put("diasTranscurridos", diff);
+                    out.add(m);
+                    if (actualizar) {
+                        try {
+                            s.setEstado(SolicitudEstado.VENCIDO);
+                            solicitudAlojamientoService.update(s);
+                        } catch (Exception ex) {
+                            // log and continue
+                            logger.error("Error al marcar solicitud id={} como VENCIDO: {}", s.getId(), ex.getMessage());
+                        }
+                    }
+                }
+            }
+
+            if (out.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            logger.error("Error en marcarVencidas: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", e.getMessage()));
         }
     }
 }

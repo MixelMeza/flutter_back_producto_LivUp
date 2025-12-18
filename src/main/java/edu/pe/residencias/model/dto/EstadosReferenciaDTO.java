@@ -35,7 +35,8 @@ public class EstadosReferenciaDTO {
             Map.of("valor", "reservada", "label", "Reservada"),
             Map.of("valor", "aceptada", "label", "Aceptada"),
             Map.of("valor", "rechazada", "label", "Rechazada"),
-            Map.of("valor", "cancelada", "label", "Cancelada")
+            Map.of("valor", "cancelada", "label", "Cancelada"),
+            Map.of("valor", "vencido", "label", "Vencida")
         );
         
         // Estados de Usuarios
