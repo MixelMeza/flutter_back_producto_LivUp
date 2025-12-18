@@ -5,11 +5,15 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.zip.GZIPOutputStream;
 
 import javax.sql.DataSource;
@@ -18,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -28,6 +34,8 @@ import edu.pe.residencias.service.BackupService;
 
 @Service
 public class BackupServiceImpl implements BackupService {
+
+    private static final Logger logger = LoggerFactory.getLogger(BackupServiceImpl.class);
 
     @Autowired
     private BackupRepository backupRepository;
@@ -207,14 +215,41 @@ public class BackupServiceImpl implements BackupService {
                 jdbcTemplate.execute("DELETE FROM `" + table + "`");
             }
 
+            // get existing columns for target table to avoid inserting unknown columns
+            Set<String> existingCols = getExistingTableColumns(table);
+
             // insert rows
             for (Map<String, Object> row : rows) {
                 if (row == null) continue;
                 var cols = new java.util.ArrayList<String>();
                 var vals = new java.util.ArrayList<Object>();
+                var ignored = new java.util.ArrayList<String>();
                 for (Map.Entry<String, Object> colEntry : row.entrySet()) {
-                    cols.add("`" + colEntry.getKey() + "`");
+                    String colName = colEntry.getKey();
+                    // If column does not exist, try to create it dynamically (best-effort)
+                    if (!existingCols.contains(colName)) {
+                        if (isSafeIdentifier(colName)) {
+                            try {
+                                addColumnIfNotExists(table, colName, colEntry.getValue());
+                                // refresh existing columns set
+                                existingCols = getExistingTableColumns(table);
+                            } catch (Exception ex) {
+                                // If we can't create the column, skip and log
+                                ignored.add(colName);
+                                logger.warn("Could not create missing column {} in table {}: {}", colName, table, ex.getMessage());
+                                continue;
+                            }
+                        } else {
+                            ignored.add(colName);
+                            logger.warn("Skipping unsafe column name for table {}: {}", table, colName);
+                            continue;
+                        }
+                    }
+                    cols.add("`" + colName + "`");
                     vals.add(colEntry.getValue());
+                }
+                if (!ignored.isEmpty()) {
+                    logger.warn("Skipping unknown columns for table {}: {}", table, String.join(",", ignored));
                 }
                 if (cols.isEmpty()) continue;
                 String sql = "INSERT INTO `" + table + "` (" + String.join(",", cols) + ") VALUES (" + String.join(",", java.util.Collections.nCopies(cols.size(), "?")) + ")";
@@ -264,6 +299,92 @@ public class BackupServiceImpl implements BackupService {
                     // ignore
                 }
             }
+        }
+        }
+
+    private Set<String> getExistingTableColumns(String table) {
+        Set<String> cols = new HashSet<>();
+        java.sql.Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = dataSource.getConnection();
+            ps = conn.prepareStatement("SELECT * FROM `" + table + "` LIMIT 0");
+            rs = ps.executeQuery();
+            ResultSetMetaData md = rs.getMetaData();
+            for (int i = 1; i <= md.getColumnCount(); i++) {
+                cols.add(md.getColumnName(i));
+            }
+        } catch (SQLException ex) {
+            // If table doesn't exist or metadata cannot be read, return empty set
+            logger.warn("Could not read metadata for table {}: {}", table, ex.getMessage());
+        } finally {
+            try { if (rs != null) rs.close(); } catch (Exception e) {}
+            try { if (ps != null) ps.close(); } catch (Exception e) {}
+            try { if (conn != null) conn.close(); } catch (Exception e) {}
+        }
+        return cols;
+    }
+
+    /**
+     * Check that an identifier (table/column) contains only safe characters.
+     * This is a defensive check before building DDL SQL strings.
+     */
+    private boolean isSafeIdentifier(String ident) {
+        if (ident == null) return false;
+        return ident.matches("[A-Za-z0-9_]+");
+    }
+
+    /**
+     * Infer a reasonable SQL column type from a sample Java object.
+     * This is a best-effort heuristic and may be adjusted for your schema.
+     */
+    private String inferSqlType(Object sample) {
+        if (sample == null) return "TEXT";
+        if (sample instanceof Integer || sample instanceof Long) return "BIGINT";
+        if (sample instanceof Short || sample instanceof Byte) return "SMALLINT";
+        if (sample instanceof Float || sample instanceof Double) return "DOUBLE";
+        if (sample instanceof Boolean) return "TINYINT(1)";
+        if (sample instanceof java.util.Map || sample instanceof java.util.List) {
+            // If MySQL supports JSON, use it; otherwise fall back to TEXT
+            return "JSON";
+        }
+        String s = sample.toString();
+        // ISO datetime detection (e.g. 2025-12-18T16:01:15 or 2025-12-18 16:01:15)
+        if (s.matches("\\d{4}-\\d{2}-\\d{2}T.*") || s.matches("\\d{4}-\\d{2}-\\d{2} .*")) {
+            return "DATETIME";
+        }
+        if (s.length() > 1024) return "LONGTEXT";
+        if (s.length() > 255) return "TEXT";
+        return "VARCHAR(255)";
+    }
+
+    /**
+     * Attempt to add a column to the target table if it does not already exist.
+     * This is executed as a best-effort to prevent data loss when restoring backups
+     * that contain columns not present in the destination schema.
+     */
+    private void addColumnIfNotExists(String table, String column, Object sample) {
+        if (!isSafeIdentifier(table) || !isSafeIdentifier(column)) {
+            throw new IllegalArgumentException("Unsafe table or column name");
+        }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?",
+                    Integer.class, table, column);
+            if (cnt != null && cnt > 0) return; // already exists
+        } catch (Exception ex) {
+            // If we can't query information_schema, fail fast to avoid blind ALTERs
+            throw new RuntimeException("Could not verify existing columns for table " + table + ": " + ex.getMessage(), ex);
+        }
+
+        String sqlType = inferSqlType(sample);
+        String alter = "ALTER TABLE `" + table + "` ADD COLUMN `" + column + "` " + sqlType + " NULL";
+        try {
+            jdbcTemplate.execute(alter);
+            logger.info("Added missing column {} to table {} as {}", column, table, sqlType);
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to add column " + column + " to table " + table + ": " + ex.getMessage(), ex);
         }
     }
 }
