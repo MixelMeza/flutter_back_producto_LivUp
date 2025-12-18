@@ -38,7 +38,21 @@ public class BackupServiceImpl implements BackupService {
     @Autowired
     private DataSource dataSource;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = createObjectMapper();
+
+    private static ObjectMapper createObjectMapper() {
+        ObjectMapper m = new ObjectMapper();
+        try {
+            // Register JavaTime module so LocalDateTime and other java.time types are handled
+            m.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+            // Prefer ISO-8601 string representation instead of timestamps
+            m.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        } catch (NoClassDefFoundError ex) {
+            // jackson-datatype-jsr310 might not be on the classpath in some environments;
+            // leave default mapper in that case and surface potential errors later.
+        }
+        return m;
+    }
 
     @Override
     @Transactional
@@ -155,7 +169,30 @@ public class BackupServiceImpl implements BackupService {
         Map<String, Object> dump = objectMapper.readValue(json, Map.class);
 
         // For each table, optionally truncate and insert rows
-        for (Map.Entry<String, Object> e : dump.entrySet()) {
+
+        java.sql.Connection conn = null;
+        boolean isMySql = false;
+        try {
+            conn = dataSource.getConnection();
+            String product = conn.getMetaData().getDatabaseProductName();
+            if (product != null && product.toLowerCase().contains("mysql")) {
+                isMySql = true;
+            }
+        } finally {
+            if (conn != null) conn.close();
+        }
+
+        // If truncating and DB is MySQL, disable FK checks temporarily to avoid constraint errors
+        if (truncate && isMySql) {
+            try {
+                jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=0");
+            } catch (Exception ex) {
+                // ignore - best effort
+            }
+        }
+
+        try {
+            for (Map.Entry<String, Object> e : dump.entrySet()) {
             String table = e.getKey();
             Object value = e.getValue();
             if (!(value instanceof List)) {
@@ -186,6 +223,45 @@ public class BackupServiceImpl implements BackupService {
                 } catch (Exception ex) {
                     // if insert fails, throw to abort restore
                     throw new RuntimeException("Failed to insert into table " + table + ": " + ex.getMessage(), ex);
+                }
+            }
+
+            // After inserting, if rows contained an 'id' column numeric, try to adjust AUTO_INCREMENT (MySQL)
+            try {
+                if (!rows.isEmpty() && rows.get(0).containsKey("id") && isMySql) {
+                    long maxId = -1L;
+                    for (Map<String, Object> row : rows) {
+                        Object idVal = row.get("id");
+                        if (idVal instanceof Number) {
+                            long v = ((Number) idVal).longValue();
+                            if (v > maxId) maxId = v;
+                        } else if (idVal != null) {
+                            try {
+                                long v = Long.parseLong(idVal.toString());
+                                if (v > maxId) maxId = v;
+                            } catch (Exception ex) {
+                                // ignore non-numeric id
+                            }
+                        }
+                    }
+                    if (maxId >= 0) {
+                        try {
+                            jdbcTemplate.execute("ALTER TABLE `" + table + "` AUTO_INCREMENT = " + (maxId + 1));
+                        } catch (Exception ex) {
+                            // ignore failures adjusting auto_increment
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore auto-increment adjustments
+            }
+        }
+        } finally {
+            if (truncate && isMySql) {
+                try {
+                    jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS=1");
+                } catch (Exception ex) {
+                    // ignore
                 }
             }
         }
