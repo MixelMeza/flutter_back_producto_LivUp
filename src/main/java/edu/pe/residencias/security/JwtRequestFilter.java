@@ -28,7 +28,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         // Exclude login, register, public keepalive and solicitudes vencidas endpoint from JWT requirement
         if ("/api/auth/login".equals(path) || "/api/auth/register".equals(path) || "/api/public/keepalive".equals(path)
-            || "/api/solicitudes-alojamiento/vencidas".equals(path)) {
+            || "/api/solicitudes-alojamiento/vencidas".equals(path) || "/api/public/backups/run".equals(path)) {
             filterChain.doFilter(request, response);
             return;
         }

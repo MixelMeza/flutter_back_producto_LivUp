@@ -85,6 +85,19 @@ public class BackupServiceImpl implements BackupService {
     }
 
     @Override
+    public java.util.Optional<Backup> findMostRecent() {
+        return backupRepository.findFirstByOrderByCreatedAtDesc();
+    }
+
+    @Override
+    public java.util.Optional<Backup> findLatestByDate(java.time.LocalDate date) {
+        if (date == null) return java.util.Optional.empty();
+        java.time.LocalDateTime start = date.atStartOfDay();
+        java.time.LocalDateTime end = start.plusDays(1);
+        return backupRepository.findFirstByCreatedAtBetweenOrderByCreatedAtDesc(start, end);
+    }
+
+    @Override
     public Optional<Backup> findById(Long id) {
         return backupRepository.findById(id);
     }
@@ -93,5 +106,88 @@ public class BackupServiceImpl implements BackupService {
     @Transactional
     public void deleteById(Long id) {
         backupRepository.deleteById(id);
+    }
+
+    @Override
+    @Transactional
+    public Backup updateName(Long id, String newName) throws Exception {
+        var opt = backupRepository.findById(id);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Backup not found");
+        Backup b = opt.get();
+        b.setName(newName == null || newName.isBlank() ? b.getName() : newName);
+        return backupRepository.save(b);
+    }
+
+    @Override
+    @Transactional
+    public Backup saveUploadedBackup(String name, byte[] content, String mimeType, Usuario createdBy) throws Exception {
+        if (content == null) throw new IllegalArgumentException("Content is null");
+        Backup b = new Backup();
+        b.setName(name == null || name.isBlank() ? "uploaded-backup-" + edu.pe.residencias.util.DateTimeUtil.nowLima() : name);
+        b.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+        b.setCreatedBy(createdBy);
+        b.setContent(content);
+        b.setSizeBytes((long) content.length);
+        b.setMimeType(mimeType == null ? "application/gzip" : mimeType);
+        return backupRepository.save(b);
+    }
+
+    @Override
+    @Transactional
+    public void restoreBackup(Long id, boolean truncate) throws Exception {
+        var opt = backupRepository.findById(id);
+        if (opt.isEmpty()) throw new IllegalArgumentException("Backup not found");
+        Backup b = opt.get();
+        if (b.getContent() == null || b.getContent().length == 0) throw new IllegalStateException("Backup content empty");
+
+        // decompress
+        java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(b.getContent());
+        java.util.zip.GZIPInputStream gis = new java.util.zip.GZIPInputStream(bais);
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int r;
+        while ((r = gis.read(buf)) != -1) baos.write(buf, 0, r);
+        gis.close();
+        byte[] json = baos.toByteArray();
+
+        // parse JSON to Map<table, List<rowMap>>
+        @SuppressWarnings("unchecked")
+        Map<String, Object> dump = objectMapper.readValue(json, Map.class);
+
+        // For each table, optionally truncate and insert rows
+        for (Map.Entry<String, Object> e : dump.entrySet()) {
+            String table = e.getKey();
+            Object value = e.getValue();
+            if (!(value instanceof List)) {
+                // skip non-list entries (errors etc.)
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) value;
+
+            if (truncate) {
+                // delete existing rows
+                jdbcTemplate.execute("DELETE FROM `" + table + "`");
+            }
+
+            // insert rows
+            for (Map<String, Object> row : rows) {
+                if (row == null) continue;
+                var cols = new java.util.ArrayList<String>();
+                var vals = new java.util.ArrayList<Object>();
+                for (Map.Entry<String, Object> colEntry : row.entrySet()) {
+                    cols.add("`" + colEntry.getKey() + "`");
+                    vals.add(colEntry.getValue());
+                }
+                if (cols.isEmpty()) continue;
+                String sql = "INSERT INTO `" + table + "` (" + String.join(",", cols) + ") VALUES (" + String.join(",", java.util.Collections.nCopies(cols.size(), "?")) + ")";
+                try {
+                    jdbcTemplate.update(sql, vals.toArray());
+                } catch (Exception ex) {
+                    // if insert fails, throw to abort restore
+                    throw new RuntimeException("Failed to insert into table " + table + ": " + ex.getMessage(), ex);
+                }
+            }
+        }
     }
 }

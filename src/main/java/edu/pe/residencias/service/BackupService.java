@@ -11,4 +11,9 @@ public interface BackupService {
     List<Backup> listBackups();
     Optional<Backup> findById(Long id);
     void deleteById(Long id);
+    Backup updateName(Long id, String newName) throws Exception;
+    void restoreBackup(Long id, boolean truncate) throws Exception;
+    java.util.Optional<Backup> findMostRecent();
+    java.util.Optional<Backup> findLatestByDate(java.time.LocalDate date);
+    Backup saveUploadedBackup(String name, byte[] content, String mimeType, Usuario createdBy) throws Exception;
 }
