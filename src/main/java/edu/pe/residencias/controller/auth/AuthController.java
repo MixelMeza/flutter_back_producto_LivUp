@@ -265,28 +265,45 @@ public class AuthController {
                 return new ResponseEntity<>(new ErrorResponse("Tu correo ya está verificado"), HttpStatus.BAD_REQUEST);
             }
 
-            // Invalidar tokens anteriores del mismo usuario
-            var oldTokens = verificationTokenRepository.findByUsuario(user);
-            for (var oldToken : oldTokens) {
-                if (!Boolean.TRUE.equals(oldToken.getUsed())) {
-                    oldToken.setUsed(true);
-                    verificationTokenRepository.save(oldToken);
+            // Buscar un token válido existente (no usado y no expirado)
+            var tokens = verificationTokenRepository.findByUsuario(user);
+            var now = edu.pe.residencias.util.DateTimeUtil.nowLima();
+            edu.pe.residencias.model.entity.VerificationToken chosen = null;
+            if (tokens != null) {
+                for (var t : tokens) {
+                    if (!Boolean.TRUE.equals(t.getUsed())) {
+                        if (t.getExpiresAt() == null || t.getExpiresAt().isAfter(now)) {
+                            chosen = t; // reuse existing valid token
+                            break;
+                        }
+                    }
                 }
             }
 
-            // Crear nuevo token
-            String verificationToken = java.util.UUID.randomUUID().toString();
-            edu.pe.residencias.model.entity.VerificationToken vt = new edu.pe.residencias.model.entity.VerificationToken();
-            vt.setToken(verificationToken);
-            vt.setUsuario(user);
-            vt.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
-            vt.setExpiresAt(edu.pe.residencias.util.DateTimeUtil.nowLima().plusHours(24));
-            vt.setUsed(false);
-            verificationTokenRepository.save(vt);
+            // Si no hay token válido, invalidar antiguos y crear uno nuevo
+            if (chosen == null) {
+                if (tokens != null) {
+                    for (var t : tokens) {
+                        if (!Boolean.TRUE.equals(t.getUsed())) {
+                            t.setUsed(true);
+                            verificationTokenRepository.save(t);
+                        }
+                    }
+                }
 
-            // Enviar email de verificación
+                String verificationToken = java.util.UUID.randomUUID().toString();
+                chosen = new edu.pe.residencias.model.entity.VerificationToken();
+                chosen.setToken(verificationToken);
+                chosen.setUsuario(user);
+                chosen.setCreatedAt(now);
+                chosen.setExpiresAt(now.plusHours(24));
+                chosen.setUsed(false);
+                verificationTokenRepository.save(chosen);
+            }
+
+            // Enviar email de verificación usando el token elegido/creado
             try {
-                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
+                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + chosen.getToken();
                 String subject = "Verifica tu correo en LivUp";
                 String plainText = "Para verificar tu correo haz clic en: " + verifyLink;
                 String html = buildVerificationEmailHtml(user.getPersona().getEmail(), verifyLink);
@@ -295,7 +312,7 @@ public class AuthController {
                 System.err.println("[AuthController] Error al enviar email: " + emailEx.getMessage());
                 return new ResponseEntity<>(new ErrorResponse("No se pudo enviar el correo de verificación. Verifica que tu email sea válido."), HttpStatus.SERVICE_UNAVAILABLE);
             }
-            
+
             return new ResponseEntity<>("Correo de verificación enviado exitosamente a " + user.getPersona().getEmail(), HttpStatus.OK);
         } catch (io.jsonwebtoken.JwtException jwtEx) {
             System.err.println("[AuthController] Error JWT: " + jwtEx.getMessage());
