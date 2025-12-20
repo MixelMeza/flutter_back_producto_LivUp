@@ -17,6 +17,8 @@ public class UserProfileDTO {
     private String uuid;
     private String username;
     private String displayName;
+    private String nombre;
+    private String apellido;
     private String rol;
     private Long rol_id;
     private String email;
@@ -26,6 +28,7 @@ public class UserProfileDTO {
     private String ubicacion;
     private String direccion;
     private String fecha_nacimiento;
+    private String notas;
     private String created_at;
     private UsuarioEstado estado;
     private List<String> permisos;

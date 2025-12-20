@@ -19,9 +19,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestParam;
+import jakarta.servlet.http.HttpServletRequest;
+import edu.pe.residencias.repository.UsuarioRepository;
+import edu.pe.residencias.repository.HabitacionRepository;
+import edu.pe.residencias.model.dto.SolicitudResumenDTO;
+import io.jsonwebtoken.Claims;
 import edu.pe.residencias.util.DateTimeUtil;
 import java.time.temporal.ChronoUnit;
 import edu.pe.residencias.model.entity.SolicitudAlojamiento;
+import edu.pe.residencias.model.dto.SolicitudDetalleDTO;
 import edu.pe.residencias.service.SolicitudAlojamientoService;
 import edu.pe.residencias.model.enums.SolicitudEstado;
 
@@ -33,6 +39,11 @@ public class SolicitudAlojamientoController {
     @Autowired
     private SolicitudAlojamientoService solicitudAlojamientoService;
 
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private HabitacionRepository habitacionRepository;
     @GetMapping
     public ResponseEntity<List<SolicitudAlojamiento>> readAll() {
         try {
@@ -59,11 +70,42 @@ public class SolicitudAlojamientoController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<SolicitudAlojamiento> getSolicitudAlojamientoId(@PathVariable("id") Long id) {
+    public ResponseEntity<?> getSolicitudAlojamientoId(@PathVariable("id") Long id) {
         try {
-            SolicitudAlojamiento s = solicitudAlojamientoService.read(id).get();
-            return new ResponseEntity<>(s, HttpStatus.OK);
+            var opt = solicitudAlojamientoService.read(id);
+            if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(java.util.Map.of("error", "Solicitud no encontrada"));
+            SolicitudAlojamiento s = opt.get();
+
+            SolicitudDetalleDTO dto = new SolicitudDetalleDTO();
+            dto.setId(s.getId());
+            dto.setFechaSolicitud(s.getFechaSolicitud());
+            dto.setFechaInicio(s.getFechaInicio());
+            dto.setFechaFin(s.getFechaFin());
+            dto.setDuracionMeses(s.getDuracionMeses());
+            dto.setFijo(s.getFijo());
+            dto.setEstado(s.getEstado());
+            dto.setComentarios(s.getComentarios());
+
+            if (s.getHabitacion() != null) {
+                dto.setHabitacionNombre(s.getHabitacion().getNombre());
+                if (s.getHabitacion().getResidencia() != null) dto.setResidenciaNombre(s.getHabitacion().getResidencia().getNombre());
+            } else if (s.getResidencia() != null) {
+                dto.setResidenciaNombre(s.getResidencia().getNombre());
+            }
+
+            if (s.getEstudiante() != null && s.getEstudiante().getPersona() != null) {
+                var p = s.getEstudiante().getPersona();
+                String nombreCompleto = (p.getNombre() != null ? p.getNombre() : "") + " " + (p.getApellido() != null ? p.getApellido() : "");
+                dto.setEstudianteNombreCompleto(nombreCompleto.trim());
+                dto.setEstudianteFotoPerfil(p.getFotoUrl());
+                dto.setEstudianteEmail(p.getEmail());
+                dto.setEstudianteTelefono(p.getTelefono());
+                dto.setEstudianteNotas(p.getNotas());
+            }
+
+            return ResponseEntity.ok(dto);
         } catch (Exception e) {
+            logger.error("Error en getSolicitudAlojamientoId id={}", id, e);
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -80,12 +122,16 @@ public class SolicitudAlojamientoController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateSolicitudAlojamiento(@PathVariable("id") Long id, @Valid @RequestBody SolicitudAlojamiento solicitudAlojamiento) {
-        Optional<SolicitudAlojamiento> s = solicitudAlojamientoService.read(id);
-        if (s.isEmpty()) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        } else {
+        try {
+            var existing = solicitudAlojamientoService.read(id);
+            if (existing.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Solicitud no encontrada");
+            }
+            solicitudAlojamiento.setId(id);
             SolicitudAlojamiento updatedSolicitudAlojamiento = solicitudAlojamientoService.update(solicitudAlojamiento);
             return new ResponseEntity<>(updatedSolicitudAlojamiento, HttpStatus.OK);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", e.getMessage()));
         }
     }
 
@@ -102,6 +148,42 @@ public class SolicitudAlojamientoController {
             return new ResponseEntity<>(updated, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PutMapping("/{id}/rechazar")
+    public ResponseEntity<?> rechazarSolicitud(@PathVariable("id") Long id, HttpServletRequest req) {
+        try {
+            Claims claims = (Claims) req.getAttribute("jwtClaims");
+            if (claims == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "No JWT claims found"));
+            String uid = claims.get("uid", String.class);
+            if (uid == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "Invalid token claims"));
+
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "Usuario no encontrado"));
+            var usuario = usuarioOpt.get();
+
+            var opt = solicitudAlojamientoService.read(id);
+            if (opt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(java.util.Map.of("error", "Solicitud no encontrada"));
+            var solicitud = opt.get();
+
+            var habitacion = solicitud.getHabitacion();
+            if (habitacion == null || habitacion.getResidencia() == null || habitacion.getResidencia().getUsuario() == null) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(java.util.Map.of("error", "Solicitud sin propietario asociado"));
+            }
+            var propietario = habitacion.getResidencia().getUsuario();
+            boolean isOwner = propietario.getId() != null && propietario.getId().equals(usuario.getId());
+            boolean isAdmin = usuario.getRol() != null && "admin".equalsIgnoreCase(usuario.getRol().getNombre());
+            if (!isOwner && !isAdmin) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(java.util.Map.of("error", "No eres propietario ni administrador"));
+            }
+
+            solicitud.setEstado(SolicitudEstado.RECHAZADA);
+            var updated = solicitudAlojamientoService.update(solicitud);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            logger.error("Error al rechazar solicitud id={}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("error", e.getMessage()));
         }
     }
 
@@ -166,31 +248,85 @@ public class SolicitudAlojamientoController {
     }
 
     @GetMapping("/habitacion/{habitacionId}/solicitudes")
-    public ResponseEntity<?> listarSolicitudesPorHabitacion(@PathVariable("habitacionId") Long habitacionId) {
+    public ResponseEntity<?> listarSolicitudesPorHabitacion(@PathVariable("habitacionId") Long habitacionId, HttpServletRequest req) {
         try {
+            // Authorization: only the owner (propietario) of the habitacion's residencia may list solicitudes
+            // controllers behind JwtRequestFilter have the parsed claims as request attribute "jwtClaims"
+            Claims claims = (Claims) req.getAttribute("jwtClaims");
+            if (claims == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "No JWT claims found"));
+            }
+            String uid = claims.get("uid", String.class);
+            if (uid == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "Invalid token claims"));
+
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("error", "Usuario no encontrado"));
+            var usuario = usuarioOpt.get();
+
+            var habOpt = habitacionRepository.findById(habitacionId);
+            if (habOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(java.util.Map.of("error", "Habitación no encontrada"));
+            var habitacion = habOpt.get();
+            if (habitacion.getResidencia() == null || habitacion.getResidencia().getUsuario() == null) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(java.util.Map.of("error", "Habitación no tiene propietario asociado"));
+            }
+            var propietario = habitacion.getResidencia().getUsuario();
+            boolean isOwner = propietario.getId().equals(usuario.getId());
+            boolean isAdmin = usuario.getRol() != null && "admin".equalsIgnoreCase(usuario.getRol().getNombre());
+            if (!isOwner && !isAdmin) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(java.util.Map.of("error", "No eres propietario ni administrador"));
+            }
+
             var list = solicitudAlojamientoService.findByHabitacionIdOrderByFechaSolicitudDesc(habitacionId);
             if (list == null || list.isEmpty()) {
                 return new ResponseEntity<>(HttpStatus.NO_CONTENT);
             }
-            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            // Filter out VENCIDO and CANCELADA
+            java.util.List<edu.pe.residencias.model.entity.SolicitudAlojamiento> filtered = new java.util.ArrayList<>();
             for (var s : list) {
-                java.util.Map<String, Object> m = new java.util.HashMap<>();
-                m.put("id", s.getId());
-                m.put("fechaSolicitud", s.getFechaSolicitud());
-                m.put("fechaInicio", s.getFechaInicio());
-                m.put("fechaFin", s.getFechaFin());
-                m.put("duracionMeses", s.getDuracionMeses());
-                m.put("comentarios", s.getComentarios());
-                m.put("estado", s.getEstado());
+                if (s == null || s.getEstado() == null) continue;
+                if (s.getEstado() == edu.pe.residencias.model.enums.SolicitudEstado.VENCIDO) continue;
+                if (s.getEstado() == edu.pe.residencias.model.enums.SolicitudEstado.CANCELADA) continue;
+                filtered.add(s);
+            }
+            if (filtered.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+
+            // Order: PENDIENTE first, then RECHAZADA, then the rest. Within same priority keep fechaSolicitud desc.
+            java.util.Map<edu.pe.residencias.model.enums.SolicitudEstado, Integer> priority = new java.util.HashMap<>();
+            priority.put(edu.pe.residencias.model.enums.SolicitudEstado.PENDIENTE, 0);
+            priority.put(edu.pe.residencias.model.enums.SolicitudEstado.RECHAZADA, 1);
+
+            filtered.sort((a, b) -> {
+                int pa = priority.getOrDefault(a.getEstado(), 2);
+                int pb = priority.getOrDefault(b.getEstado(), 2);
+                if (pa != pb) return Integer.compare(pa, pb);
+                java.time.LocalDateTime fa = a.getFechaSolicitud();
+                java.time.LocalDateTime fb = b.getFechaSolicitud();
+                if (fa == null && fb == null) return 0;
+                if (fa == null) return 1;
+                if (fb == null) return -1;
+                return fb.compareTo(fa); // desc
+            });
+
+            java.util.List<SolicitudResumenDTO> out = new java.util.ArrayList<>();
+            for (var s : filtered) {
+                SolicitudResumenDTO dto = new SolicitudResumenDTO();
+                dto.setId(s.getId());
+                dto.setFechaSolicitud(s.getFechaSolicitud());
+                dto.setFechaInicio(s.getFechaInicio());
+                dto.setFechaFin(s.getFechaFin());
+                dto.setEstado(s.getEstado());
                 if (s.getEstudiante() != null && s.getEstudiante().getPersona() != null) {
                     var p = s.getEstudiante().getPersona();
-                    m.put("nombre", (p.getNombre() != null ? p.getNombre() : "") + " " + (p.getApellido() != null ? p.getApellido() : ""));
-                    m.put("fotoPerfil", p.getFotoUrl());
+                    String nombre = (p.getNombre() != null ? p.getNombre() : "") + " " + (p.getApellido() != null ? p.getApellido() : "");
+                    dto.setNombreCompleto(nombre.trim());
+                    dto.setFotoPerfil(p.getFotoUrl());
+                    dto.setSexo(p.getSexo());
                 } else {
-                    m.put("nombre", null);
-                    m.put("fotoPerfil", null);
+                    dto.setNombreCompleto(null);
+                    dto.setFotoPerfil(null);
+                    dto.setSexo(null);
                 }
-                out.add(m);
+                out.add(dto);
             }
             return ResponseEntity.ok(out);
         } catch (Exception e) {

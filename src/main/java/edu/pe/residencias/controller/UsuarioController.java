@@ -104,7 +104,7 @@ public class UsuarioController {
 
     @PutMapping("/me")
     public ResponseEntity<?> updateMe(@RequestHeader(value = "Authorization", required = false) String authHeader,
-                                      @RequestBody PersonaUpdateDTO updateDto) {
+                                      @Valid @RequestBody PersonaUpdateDTO updateDto) {
         try {
             if (authHeader == null || authHeader.isEmpty()) {
                 return new ResponseEntity<>(new ErrorResponse("No token provided"), HttpStatus.UNAUTHORIZED);
@@ -173,7 +173,7 @@ public class UsuarioController {
     }
 
     @PatchMapping("/me")
-    public ResponseEntity<?> updateMyProfile(@RequestBody PersonaUpdateDTO updateDTO, 
+    public ResponseEntity<?> updateMyProfile(@Valid @RequestBody PersonaUpdateDTO updateDTO, 
                                            @RequestHeader(value = "Authorization", required = false) String authHeader) {
         try {
             if (authHeader == null || authHeader.isEmpty()) {

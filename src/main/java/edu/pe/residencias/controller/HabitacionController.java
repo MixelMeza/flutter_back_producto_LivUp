@@ -50,9 +50,74 @@ public class HabitacionController {
     @Autowired
     private edu.pe.residencias.repository.UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private edu.pe.residencias.service.FavoritoService favoritoService;
+
     @GetMapping
-    public ResponseEntity<List<Habitacion>> readAll() {
+    public ResponseEntity<?> readAll(@org.springframework.web.bind.annotation.RequestParam(value = "destacado", required = false) Boolean destacado,
+                                     @org.springframework.web.bind.annotation.RequestParam(value = "limit", required = false) Integer limit,
+                                     jakarta.servlet.http.HttpServletRequest request) {
         try {
+            // If caller requests destacado=true, return a compact DTO list honoring limit and user favorites
+            if (Boolean.TRUE.equals(destacado)) {
+                List<Habitacion> habitaciones = habitacionService.readAll();
+                java.util.stream.Stream<Habitacion> stream = habitaciones.stream().filter(h -> h != null && Boolean.TRUE.equals(h.getDestacado()) && h.getEstado() == edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE);
+                if (limit != null && limit > 0) stream = stream.limit(limit);
+
+                // Determine user id from token (optional) - use AtomicReference to allow mutation
+                java.util.concurrent.atomic.AtomicReference<Long> usuarioIdRef = new java.util.concurrent.atomic.AtomicReference<>(null);
+                try {
+                    String auth = request.getHeader("Authorization");
+                    if (auth != null && auth.startsWith("Bearer ")) {
+                        String token = auth.substring("Bearer ".length()).trim();
+                        var claims = jwtUtil.parseToken(token);
+                        String uid = claims.get("uid", String.class);
+                        if (uid != null) {
+                            var uopt = usuarioRepository.findByUuid(uid);
+                            if (uopt.isPresent()) usuarioIdRef.set(uopt.get().getId());
+                        }
+                    }
+                } catch (Exception ignore) {
+                }
+
+                java.util.List<edu.pe.residencias.model.dto.HabitacionDestacadaDTO> out = new java.util.ArrayList<>();
+                stream.forEach(h -> {
+                    try {
+                        edu.pe.residencias.model.dto.HabitacionDestacadaDTO dto = new edu.pe.residencias.model.dto.HabitacionDestacadaDTO();
+                        dto.setId(h.getId());
+                        dto.setNombre(h.getNombre());
+                        dto.setPrecioMensual(h.getPrecioMensual());
+                        dto.setCapacidad(h.getCapacidad());
+                        dto.setPiso(h.getPiso());
+                        dto.setResidenciaNombre(h.getResidencia() != null ? h.getResidencia().getNombre() : null);
+
+                        // first image
+                        java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+                        if (imgs != null && !imgs.isEmpty()) {
+                            imgs.sort((a,b) -> {
+                                int oa = a == null || a.getOrden() == null ? Integer.MAX_VALUE : a.getOrden();
+                                int ob = b == null || b.getOrden() == null ? Integer.MAX_VALUE : b.getOrden();
+                                return Integer.compare(oa, ob);
+                            });
+                            dto.setFotoUrl(imgs.get(0) != null ? imgs.get(0).getUrl() : null);
+                        } else {
+                            dto.setFotoUrl(null);
+                        }
+
+                        boolean fav = usuarioIdRef.get() != null && favoritoService.isLiked(usuarioIdRef.get(), h.getId());
+                        dto.setFavorito(fav);
+
+                        out.add(dto);
+                    } catch (Exception ex) {
+                        // skip problematic item
+                    }
+                });
+
+                if (out.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+                return ResponseEntity.ok(out);
+            }
+
+            // Default: return full list of Habitacion entities
             List<Habitacion> habitaciones = habitacionService.readAll();
             if (habitaciones.isEmpty()) {
                 return new ResponseEntity<>(HttpStatus.NO_CONTENT);

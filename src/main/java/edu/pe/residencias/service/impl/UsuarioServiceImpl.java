@@ -278,10 +278,16 @@ public class UsuarioServiceImpl implements UsuarioService {
         dto.setUuid(u.getUuid());
         dto.setUsername(u.getUsername());
         String display = "";
-        if (p != null)
-            display = (p.getNombre() == null ? "" : p.getNombre()) + " "
-                    + (p.getApellido() == null ? "" : p.getApellido());
+        String nombre = null;
+        String apellido = null;
+        if (p != null) {
+            nombre = p.getNombre();
+            apellido = p.getApellido();
+            display = (nombre == null ? "" : nombre) + " " + (apellido == null ? "" : apellido);
+        }
         dto.setDisplayName(display.trim());
+        dto.setNombre(nombre);
+        dto.setApellido(apellido);
         dto.setRol(u.getRol() != null ? u.getRol().getNombre() : null);
         dto.setRol_id(u.getRol() != null ? u.getRol().getId() : null);
         dto.setEmail(p != null ? p.getEmail() : u.getUsername());
@@ -293,6 +299,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         dto.setFecha_nacimiento(p != null && p.getFechaNacimiento() != null ? p.getFechaNacimiento().toString() : null);
         dto.setCreated_at(u.getCreatedAt() != null ? u.getCreatedAt().toString()
                 : (p != null && p.getCreatedAt() != null ? p.getCreatedAt().toString() : null));
+        dto.setNotas(p != null ? p.getNotas() : null);
         dto.setEstado(u.getEstado());
         dto.setPermisos(java.util.Collections.emptyList());
 
@@ -330,6 +337,8 @@ public class UsuarioServiceImpl implements UsuarioService {
             p.setTelefono(dto.getTelefono());
         if (dto.getDireccion() != null)
             p.setDireccion(dto.getDireccion());
+        if (dto.getNotas() != null)
+            p.setNotas(dto.getNotas());
         if (dto.getFoto_url() != null)
             p.setFotoUrl(dto.getFoto_url());
         if (dto.getEmail() != null)

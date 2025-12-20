@@ -60,6 +60,8 @@ public class SolicitudAlojamientoServiceImpl implements SolicitudAlojamientoServ
             // Do NOT modify the habitacion state here. Reservation is done by owner action.
         }
 
+        // Ensure fechaSolicitud is set by server time (prevent client from spoofing)
+        solicitudAlojamiento.setFechaSolicitud(edu.pe.residencias.util.DateTimeUtil.nowLima());
         SolicitudAlojamiento saved = repository.save(solicitudAlojamiento);
         
         // Enviar notificación al propietario de la residencia
