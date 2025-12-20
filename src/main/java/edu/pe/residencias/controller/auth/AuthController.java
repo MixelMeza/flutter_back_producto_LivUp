@@ -109,7 +109,7 @@ public class AuthController {
                 // create acceso event (history)
                 Acceso acceso = new Acceso();
                 acceso.setUsuario(u);
-                acceso.setUltimaSesion(ZonedDateTime.now(ZoneId.of("America/Lima")).toLocalDateTime());
+                acceso.setUltimaSesion(edu.pe.residencias.util.DateTimeUtil.nowLima());
                 acceso.setTipo("LOGIN");
                 acceso.setIpAcceso(ip);
                 acceso.setDispositivoRel(dispositivoEntity);
@@ -492,7 +492,7 @@ public class AuthController {
             try {
                 Acceso acceso = new Acceso();
                 acceso.setUsuario(user);
-                acceso.setUltimaSesion(java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Lima")).toLocalDateTime());
+                acceso.setUltimaSesion(edu.pe.residencias.util.DateTimeUtil.nowLima());
                 acceso.setTipo("LOGOUT");
                 acceso.setIpAcceso(ip);
                 acceso.setDispositivoRel(dispositivoEntity);

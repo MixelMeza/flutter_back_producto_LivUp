@@ -40,6 +40,12 @@ public class UsuarioController {
     @Autowired
     private JwtUtil jwtUtil;
 
+    @Autowired
+    private edu.pe.residencias.repository.DispositivoRepository dispositivoRepository;
+
+    @Autowired
+    private edu.pe.residencias.repository.AccesoRepository accesoRepository;
+
     // personaRepository is handled inside the service now
 
     @GetMapping
@@ -99,6 +105,63 @@ public class UsuarioController {
         } catch (Exception ex) {
             ex.printStackTrace();
             return new ResponseEntity<>(new ErrorResponse("Failed to parse token"), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/me/dispositivos")
+    public ResponseEntity<?> myDevices(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            if (authHeader == null || authHeader.isEmpty()) {
+                return new ResponseEntity<>(new ErrorResponse("No token provided"), HttpStatus.UNAUTHORIZED);
+            }
+            String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            Claims claims = jwtUtil.parseToken(token);
+            String uuid = claims.get("uid", String.class);
+            if (uuid == null) return new ResponseEntity<>(new ErrorResponse("Invalid token"), HttpStatus.UNAUTHORIZED);
+            var usuarioOpt = usuarioService.findByUuid(uuid);
+            if (usuarioOpt.isEmpty()) return new ResponseEntity<>(new ErrorResponse("User not found"), HttpStatus.NOT_FOUND);
+            var usuario = usuarioOpt.get();
+
+            // load active dispositivos for this usuario
+            java.util.List<edu.pe.residencias.model.entity.Dispositivo> devices = dispositivoRepository.findByUsuarioIdAndActivoTrue(usuario.getId());
+            java.util.List<edu.pe.residencias.model.dto.DispositivoInfoDTO> out = new java.util.ArrayList<>();
+            for (var d : devices) {
+                try {
+                    edu.pe.residencias.model.dto.DispositivoInfoDTO dto = new edu.pe.residencias.model.dto.DispositivoInfoDTO();
+                    dto.setId(d.getId());
+                    dto.setFcmToken(d.getFcmToken());
+                    dto.setPlataforma(d.getPlataforma());
+                    dto.setModelo(d.getModelo());
+                    dto.setNombre((d.getPlataforma() == null ? "" : d.getPlataforma()) + " " + (d.getModelo() == null ? "" : d.getModelo()));
+                    dto.setActivo(d.getActivo());
+                    dto.setPrimeroVisto(d.getCreatedAt());
+
+                    // find latest acceso for this user+device
+                    var accOpt = accesoRepository.findFirstByUsuarioIdAndDispositivoRelIdOrderByUltimaSesionDesc(usuario.getId(), d.getId());
+                    if (accOpt.isPresent()) {
+                        var acc = accOpt.get();
+                        dto.setUltimoAcceso(acc.getUltimaSesion());
+                        dto.setUltimoTipo(acc.getTipo());
+                        dto.setEstaLogueado("LOGIN".equalsIgnoreCase(acc.getTipo()));
+                    } else {
+                        dto.setUltimoAcceso(null);
+                        dto.setUltimoTipo(null);
+                        dto.setEstaLogueado(false);
+                    }
+
+                    out.add(dto);
+                } catch (Exception ex) {
+                    // skip device on error
+                }
+            }
+
+            if (out.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            return ResponseEntity.ok(out);
+        } catch (io.jsonwebtoken.ExpiredJwtException ex) {
+            return new ResponseEntity<>(new ErrorResponse("Token expired"), HttpStatus.UNAUTHORIZED);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Failed to list devices"), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 

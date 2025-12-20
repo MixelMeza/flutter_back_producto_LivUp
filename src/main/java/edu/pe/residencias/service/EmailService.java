@@ -13,6 +13,8 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+// Using HTTP Resend API instead of SDK (SDK not available in current pom)
+
 @Service
 public class EmailService {
 
@@ -27,8 +29,41 @@ public class EmailService {
 
     @Value("${SENDGRID_API_KEY:}")
     private String sendgridApiKey;
+    
+    @Value("${RESENDER_API_KEY:}")
+    private String resenderApiKey;
+
+    // Support both environment variable names: RESENDER_API_KEY (legacy in this project)
+    // and RESEND_API_KEY (official Resend service token like re_xxx)
+    @Value("${RESEND_API_KEY:}")
+    private String resendApiKey;
+
+    @Value("${resender.api.url:https://api.resend.com/emails}")
+    private String resenderApiUrl;
 
     public void sendSimpleMessage(String to, String subject, String text) {
+        // If JavaMailSender (SMTP) is configured, prefer SMTP sends first.
+        if (mailSender != null) {
+            try {
+                sendViaSmtp(to, subject, text);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] SMTP send failed, falling back to Resend/SendGrid: " + ex.getMessage());
+                // continue to HTTP fallbacks
+            }
+        }
+        // Prefer Resend HTTP API if API key provided (RESEND_API_KEY or RESENDER_API_KEY)
+        String apiKey = (resendApiKey != null && !resendApiKey.isBlank()) ? resendApiKey : resenderApiKey;
+        if (apiKey != null && !apiKey.isBlank()) {
+            try {
+                sendViaResender(to, subject, text);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Resend HTTP send failed, falling back to SendGrid/SMTP: " + ex.getMessage());
+                // continue to other fallbacks
+            }
+        }
+
         // If SendGrid API key is configured, prefer HTTP API (avoids SMTP egress blocks)
         if (sendgridApiKey != null && !sendgridApiKey.isBlank()) {
             try {
@@ -40,15 +75,15 @@ public class EmailService {
             }
         }
 
-        if (mailSender == null) {
-            // Mail not configured; log to console for dev
-            System.out.println("[EmailService] MailSender not configured. Would send to=" + to + ", subject=" + subject + ", text=" + text);
-            return;
-        }
+        // No SMTP configured: log and continue to other providers
+        System.out.println("[EmailService] MailSender not configured. Would send to=" + to + ", subject=" + subject + ", text=" + text);
+    }
+
+    private void sendViaSmtp(String to, String subject, String text) {
+        if (mailSender == null) throw new IllegalStateException("JavaMailSender not configured");
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setTo(to);
-        // set From using configured property (helps with Gmail/SendGrid providers)
         message.setFrom(fromAddress);
         if (replyToAddress != null && !replyToAddress.isBlank()) {
             message.setReplyTo(replyToAddress);
@@ -56,7 +91,6 @@ public class EmailService {
         message.setSubject(subject);
         message.setText(text);
 
-        // Retry logic: try up to 3 times with backoff (5s, 10s)
         int attempts = 0;
         int maxAttempts = 3;
         long[] backoffMs = new long[] {5000L, 10000L};
@@ -65,23 +99,23 @@ public class EmailService {
                 attempts++;
                 System.out.println("[EmailService] Sending via SMTP from=" + fromAddress + " replyTo=" + replyToAddress + " to=" + to + " subject=" + subject);
                 mailSender.send(message);
-                // success
                 if (attempts > 1) {
                     System.out.println("[EmailService] Email sent on attempt " + attempts + " to=" + to);
                 }
-                break;
+                return;
             } catch (Exception ex) {
                 System.err.println("[EmailService] Attempt " + attempts + " failed to send email to=" + to + ": " + ex.getMessage());
                 if (attempts >= maxAttempts) {
                     System.err.println("[EmailService] All attempts failed to send email to=" + to);
                     throw ex;
                 }
-                // sleep before retry
                 long sleepMs = backoffMs[Math.min(attempts - 1, backoffMs.length - 1)];
                 try { Thread.sleep(sleepMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
             }
         }
     }
+
+    // Resend SDK helper removed; using HTTP-based sendViaResender instead.
 
     private void sendViaSendGrid(String to, String subject, String text) throws Exception {
         if (sendgridApiKey == null || sendgridApiKey.isBlank()) throw new IllegalStateException("SENDGRID_API_KEY not configured");
@@ -115,6 +149,64 @@ public class EmailService {
             throw new IllegalStateException("SendGrid API returned status=" + status + ", body=" + respBody);
         }
         System.out.println("[EmailService] Sent email via SendGrid to=" + to + " status=" + status);
+    }
+
+    private void sendViaResender(String to, String subject, String text) throws Exception {
+        String apiKey = (resendApiKey != null && !resendApiKey.isBlank()) ? resendApiKey : resenderApiKey;
+        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("RESEND_API_KEY / RESENDER_API_KEY not configured");
+
+        HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
+                .build();
+
+        // Resend API expects `to` as array. Support comma-separated `to` values from callers.
+        String[] tos = to == null ? new String[0] : to.split("\\s*,\\s*");
+
+        StringBuilder sb = new StringBuilder();
+        sb.append('{');
+        sb.append("\"from\":\"").append(escapeJson(fromAddress)).append("\"");
+        // `to` should be a string for single recipient, or an array of strings for multiple.
+        if (tos.length == 1) {
+            sb.append(",\"to\":\"").append(escapeJson(tos[0].trim())).append("\"");
+        } else {
+            sb.append(",\"to\":[");
+            for (int i = 0; i < tos.length; i++) {
+                if (i > 0) sb.append(',');
+                sb.append('"').append(escapeJson(tos[i].trim())).append('"');
+            }
+            sb.append(']');
+        }
+        if (replyToAddress != null && !replyToAddress.isBlank()) {
+            // Resend API expects reply_to as a string email address
+            sb.append(",\"reply_to\":\"").append(escapeJson(replyToAddress)).append("\"");
+        }
+        sb.append(",\"subject\":\"").append(escapeJson(subject)).append("\"");
+        // Prefer HTML when message looks like HTML, otherwise send as text
+        if (text != null && (text.contains("<") && text.contains("</"))) {
+            sb.append(",\"html\":\"").append(escapeJson(text)).append("\"");
+        } else {
+            sb.append(",\"text\":\"").append(escapeJson(text)).append("\"");
+        }
+        sb.append('}');
+
+        String body = sb.toString();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(resenderApiUrl))
+                .timeout(Duration.ofSeconds(30))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        int status = response.statusCode();
+        String respBody = response.body();
+        System.out.println("[EmailService] Resend response status=" + status + " body=" + respBody + " headers=" + response.headers().map());
+        if (status < 200 || status >= 300) {
+            throw new IllegalStateException("Resend API returned status=" + status + ", body=" + respBody);
+        }
+        System.out.println("[EmailService] Sent email via Resend to=" + to + " status=" + status);
     }
 
     private static String escapeJson(String s) {
