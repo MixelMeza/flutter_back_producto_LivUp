@@ -50,7 +50,28 @@ public class EmailService {
     @Value("${app.mail.smtp.fallback:false}")
     private boolean smtpFallback;
 
+    @Value("${app.mail.prefer-brevo:true}")
+    private boolean preferBrevo;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private edu.pe.residencias.service.BrevoEmailService brevoEmailService;
+
     public void sendSimpleMessage(String to, String subject, String text) {
+        // If configured to prefer Brevo, try Brevo first (no SMTP)
+        if (preferBrevo && brevoEmailService != null) {
+            try {
+                brevoEmailService.sendEmail(to, subject, text);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Brevo send failed: " + ex.toString());
+                ex.printStackTrace(System.err);
+                if (!smtpFallback) {
+                    throw new IllegalStateException("Brevo send failed and smtpFallback is disabled", ex);
+                }
+                System.err.println("[EmailService] Brevo failed; smtpFallback=true so trying SMTP/other providers");
+            }
+        }
+
         // If JavaMailSender (SMTP) is configured, prefer SMTP sends first.
         if (mailSender != null) {
             try {
@@ -119,6 +140,21 @@ public class EmailService {
                     throw new IllegalStateException("SMTP HTML send failed and smtpFallback is disabled", ex);
                 }
                 System.err.println("[EmailService] SMTP HTML failed; smtpFallback=true so trying HTTP providers");
+            }
+        }
+
+        // If configured to prefer Brevo for HTML, try Brevo first (no SMTP)
+        if (preferBrevo && brevoEmailService != null) {
+            try {
+                brevoEmailService.sendEmail(to, subject, html != null && !html.isBlank() ? html : plainText);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Brevo HTML send failed: " + ex.toString());
+                ex.printStackTrace(System.err);
+                if (!smtpFallback) {
+                    throw new IllegalStateException("Brevo HTML send failed and smtpFallback is disabled", ex);
+                }
+                System.err.println("[EmailService] Brevo failed; smtpFallback=true so trying SMTP/other providers");
             }
         }
 
