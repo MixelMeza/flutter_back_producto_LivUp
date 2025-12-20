@@ -11,6 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.stereotype.Service;
 
 // Using HTTP Resend API instead of SDK (SDK not available in current pom)
@@ -41,6 +44,12 @@ public class EmailService {
     @Value("${resender.api.url:https://api.resend.com/emails}")
     private String resenderApiUrl;
 
+    @Value("${app.mail.smtp.max-attempts:1}")
+    private int smtpMaxAttempts;
+
+    @Value("${app.mail.smtp.fallback:false}")
+    private boolean smtpFallback;
+
     public void sendSimpleMessage(String to, String subject, String text) {
         // If JavaMailSender (SMTP) is configured, prefer SMTP sends first.
         if (mailSender != null) {
@@ -48,8 +57,20 @@ public class EmailService {
                 sendViaSmtp(to, subject, text);
                 return;
             } catch (Exception ex) {
-                System.err.println("[EmailService] SMTP send failed, falling back to Resend/SendGrid: " + ex.getMessage());
-                // continue to HTTP fallbacks
+                // Log full stack trace and cause chain for exact reason
+                System.err.println("[EmailService] SMTP send failed: " + ex.toString());
+                ex.printStackTrace(System.err);
+                Throwable c = ex.getCause();
+                while (c != null) {
+                    System.err.println("[EmailService] Caused by: " + c.toString());
+                    c.printStackTrace(System.err);
+                    c = c.getCause();
+                }
+                if (!smtpFallback) {
+                    // Do not attempt HTTP fallbacks; rethrow so callers receive the error
+                    throw new IllegalStateException("SMTP send failed and smtpFallback is disabled", ex);
+                }
+                System.err.println("[EmailService] SMTP failed; smtpFallback=true so trying HTTP providers");
             }
         }
         // Prefer Resend HTTP API if API key provided (RESEND_API_KEY or RESENDER_API_KEY)
@@ -77,6 +98,92 @@ public class EmailService {
 
         // No SMTP configured: log and continue to other providers
         System.out.println("[EmailService] MailSender not configured. Would send to=" + to + ", subject=" + subject + ", text=" + text);
+    }
+
+    public void sendHtmlMessage(String to, String subject, String html, String plainText) {
+        // Try SMTP with HTML multipart if available
+        if (mailSender != null) {
+            try {
+                sendViaSmtpHtml(to, subject, html, plainText);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] SMTP HTML send failed: " + ex.toString());
+                ex.printStackTrace(System.err);
+                Throwable c = ex.getCause();
+                while (c != null) {
+                    System.err.println("[EmailService] Caused by: " + c.toString());
+                    c.printStackTrace(System.err);
+                    c = c.getCause();
+                }
+                if (!smtpFallback) {
+                    throw new IllegalStateException("SMTP HTML send failed and smtpFallback is disabled", ex);
+                }
+                System.err.println("[EmailService] SMTP HTML failed; smtpFallback=true so trying HTTP providers");
+            }
+        }
+
+        // Try Resend HTTP API (it accepts html/text)
+        String apiKey = (resendApiKey != null && !resendApiKey.isBlank()) ? resendApiKey : resenderApiKey;
+        if (apiKey != null && !apiKey.isBlank()) {
+            try {
+                // reuse sendViaResender; it checks for html content based on presence of tags
+                sendViaResender(to, subject, html != null && !html.isBlank() ? html : plainText);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Resend HTTP send failed, falling back to SendGrid/SMTP: " + ex.getMessage());
+            }
+        }
+
+        // SendGrid fallback
+        if (sendgridApiKey != null && !sendgridApiKey.isBlank()) {
+            try {
+                // SendGrid payload currently only supports text in our helper; for HTML send as text field with html tags
+                sendViaSendGrid(to, subject, html != null && !html.isBlank() ? html : plainText);
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] SendGrid API send failed, falling back to JavaMailSender: " + ex.getMessage());
+            }
+        }
+
+        System.out.println("[EmailService] MailSender not configured. Would send HTML email to=" + to + ", subject=" + subject);
+    }
+
+    private void sendViaSmtpHtml(String to, String subject, String html, String plainText) throws MessagingException {
+        if (mailSender == null) throw new IllegalStateException("JavaMailSender not configured");
+
+        MimeMessage mimeMessage = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED, StandardCharsets.UTF_8.name());
+        helper.setTo(to);
+        helper.setFrom(fromAddress);
+        if (replyToAddress != null && !replyToAddress.isBlank()) {
+            helper.setReplyTo(replyToAddress);
+        }
+        helper.setSubject(subject);
+        // set plain text and html alternative
+        helper.setText(plainText == null ? "" : plainText, html == null ? "" : html);
+
+        int attempts = 0;
+        int maxAttempts = Math.max(1, smtpMaxAttempts);
+        long[] backoffMs = new long[] {5000L, 10000L};
+        while (true) {
+            try {
+                attempts++;
+                System.out.println("[EmailService] Sending HTML via SMTP from=" + fromAddress + " to=" + to + " subject=" + subject);
+                mailSender.send(mimeMessage);
+                if (attempts > 1) {
+                    System.out.println("[EmailService] Email sent on attempt " + attempts + " to=" + to);
+                }
+                return;
+            } catch (Exception ex) {
+                System.err.println("[EmailService] Attempt " + attempts + " failed to send HTML email to=" + to + ": " + ex.getMessage());
+                if (attempts >= maxAttempts) {
+                    System.err.println("[EmailService] All attempts failed to send HTML email to=" + to);
+                    throw ex;
+                }
+                long sleepMs = backoffMs[Math.min(attempts - 1, backoffMs.length - 1)];
+                try { Thread.sleep(sleepMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
+        }
     }
 
     private void sendViaSmtp(String to, String subject, String text) {

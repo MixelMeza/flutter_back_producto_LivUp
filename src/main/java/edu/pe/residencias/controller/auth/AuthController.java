@@ -189,6 +189,53 @@ public class AuthController {
         return html;
     }
 
+    // Build a friendly, responsive HTML verification email with CTA button and plain-text fallback
+    private String buildVerificationEmailHtml(String toEmail, String verifyLink) {
+        String primary = "#0066CC";
+        String bg = "#f6f9fc";
+        String textColor = "#0f2740";
+
+        // Minimal, well-formed responsive template with preheader and clear CTA
+        String html = "<!doctype html>" +
+            "<html lang=\"es\">" +
+            "<head>" +
+            "<meta charset=\"utf-8\">" +
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+            "<title>Verifica tu correo</title>" +
+            "<style>" +
+            "  body{margin:0;padding:0;background:" + bg + ";font-family:Inter,Roboto,Arial,sans-serif;color:" + textColor + ";-webkit-font-smoothing:antialiased;}" +
+            "  .container{width:100%;max-width:680px;margin:0 auto;padding:20px;}" +
+            "  .card{background:#ffffff;border-radius:12px;padding:28px;box-shadow:0 8px 24px rgba(2,30,66,0.06);}" +
+            "  h1{font-size:20px;margin:0 0 12px;color:" + textColor + ";}" +
+            "  p{margin:0 0 16px;color:#395067;line-height:1.5;}" +
+            "  .btn{display:inline-block;padding:12px 20px;background:" + primary + ";color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;}" +
+            "  .muted{color:#7b8b98;font-size:13px;margin-top:18px;}" +
+            "  @media (max-width:480px){.card{padding:18px}.btn{width:100%;display:block;text-align:center}}" +
+            "</style>" +
+            "</head>" +
+            "<body>" +
+            "<div class=\"container\">" +
+            "  <div class=\"card\">" +
+            "    <div style=\"text-align:center;margin-bottom:16px\">" +
+            "      <img src=\"https://raw.githubusercontent.com/your-repo/assets/main/logo.png\" alt=\"LivUp\" style=\"height:46px;display:block;margin:0 auto\">" +
+            "    </div>" +
+            "    <h1>Verifica tu correo electrónico</h1>" +
+            "    <p>Hola, gracias por registrarte en LivUp. Para activar tu cuenta pulsa el botón de abajo:</p>" +
+            "    <p style=\"text-align:center;margin:20px 0\">" +
+            "      <a class=\"btn\" href=\"" + verifyLink + "\" target=\"_blank\">Verificar mi correo</a>" +
+            "    </p>" +
+            "    <p style=\"word-break:break-word;overflow-wrap:break-word;color:#1b4b77;font-size:14px;\">" +
+            "      <a href=\"" + verifyLink + "\" style=\"color:#1b4b77;word-break:break-all;\">" + verifyLink + "</a>" +
+            "    </p>" +
+            "    <p class=\"muted\">Si no solicitaste esta verificación, puedes ignorar este correo.</p>" +
+            "  </div>" +
+            "  <p style=\"text-align:center;color:#9aa7b8;font-size:12px;margin-top:12px\">LivUp &copy; " + java.time.Year.now().getValue() + "</p>" +
+            "</div>" +
+            "</body></html>";
+
+        return html;
+    }
+
     @PostMapping("/resend-verification")
     public ResponseEntity<?> resendVerification(HttpServletRequest request) {
         try {
@@ -241,8 +288,9 @@ public class AuthController {
             try {
                 String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
                 String subject = "Verifica tu correo en LivUp";
-                String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
-                emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
+                String plainText = "Para verificar tu correo haz clic en: " + verifyLink;
+                String html = buildVerificationEmailHtml(user.getPersona().getEmail(), verifyLink);
+                emailService.sendHtmlMessage(user.getPersona().getEmail(), subject, html, plainText);
             } catch (Exception emailEx) {
                 System.err.println("[AuthController] Error al enviar email: " + emailEx.getMessage());
                 return new ResponseEntity<>(new ErrorResponse("No se pudo enviar el correo de verificación. Verifica que tu email sea válido."), HttpStatus.SERVICE_UNAVAILABLE);
@@ -284,8 +332,9 @@ public class AuthController {
             try {
                 String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + token;
                 String subject = "Verifica tu correo en LivUp";
-                String bodyText = "Para verificar tu correo haz clic en: " + verifyLink;
-                emailService.sendSimpleMessage(user.getPersona().getEmail(), subject, bodyText);
+                String plainText = "Para verificar tu correo haz clic en: " + verifyLink;
+                String html = buildVerificationEmailHtml(user.getPersona().getEmail(), verifyLink);
+                emailService.sendHtmlMessage(user.getPersona().getEmail(), subject, html, plainText);
             } catch (Exception emailEx) {
                 System.err.println("[AuthController] Error al enviar email por token: " + emailEx.getMessage());
                 return new ResponseEntity<>(new ErrorResponse("No se pudo enviar el correo de verificación"), HttpStatus.SERVICE_UNAVAILABLE);
@@ -386,8 +435,9 @@ public class AuthController {
             try {
                 String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
                 String subject = "Verifica tu nuevo correo en LivUp";
-                String bodyText = "Has cambiado tu correo en LivUp. Para verificar tu nuevo correo haz clic en: " + verifyLink;
-                emailService.sendSimpleMessage(newEmail, subject, bodyText);
+                String plainText = "Has cambiado tu correo en LivUp. Para verificar tu nuevo correo haz clic en: " + verifyLink;
+                String html = buildVerificationEmailHtml(newEmail, verifyLink);
+                emailService.sendHtmlMessage(newEmail, subject, html, plainText);
             } catch (Exception emailEx) {
                 System.err.println("[AuthController] Error al enviar email de verificación: " + emailEx.getMessage());
                 return new ResponseEntity<>(new ErrorResponse("Email actualizado pero no se pudo enviar el correo de verificación. Verifica que el correo sea válido."), HttpStatus.PARTIAL_CONTENT);
