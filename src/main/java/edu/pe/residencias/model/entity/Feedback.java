@@ -19,7 +19,7 @@ import jakarta.persistence.Table;
 @Table(name = "feedback")
 public class Feedback {
 
-    public enum Tipo { sugerencia, reporte, comentario, otro }
+    public enum Tipo { sugerencia, reporte, bug, otro }
     public enum Estado { pendiente, en_proceso, resuelto }
 
     @Id
