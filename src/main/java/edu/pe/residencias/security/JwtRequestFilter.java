@@ -26,6 +26,11 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         String path = request.getServletPath();
+        // Allow preflight requests through so CORS works without requiring Authorization
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         // Exclude login, register, public keepalive and solicitudes vencidas endpoint from JWT requirement
         if ("/api/auth/login".equals(path) || "/api/auth/register".equals(path) || "/api/public/keepalive".equals(path)
             || "/api/solicitudes-alojamiento/vencidas".equals(path) || "/api/public/backups/run".equals(path)) {

@@ -3,6 +3,7 @@ package edu.pe.residencias.controller.feedback;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import io.jsonwebtoken.Claims;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +34,7 @@ public class FeedbackController {
 
     // Public: create feedback
     @PostMapping("")
-    public ResponseEntity<?> create(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> create(HttpServletRequest request, @RequestBody Map<String, String> body) {
         try {
             String tipo = body.get("tipo");
             String titulo = body.get("titulo");
@@ -50,27 +51,23 @@ public class FeedbackController {
             f.setTitulo(titulo == null ? "" : titulo);
             f.setMensaje(mensaje);
             f.setEstado(Feedback.Estado.pendiente);
-            // Si el cliente está autenticado, obtener el usuario desde el JWT (no confiar en userId del body)
-            try {
-                String authHeader = null;
-                // header may be provided in request map under "Authorization" or client should set header; prefer header
-                // We'll not rely on body.userId; check request headers by accessing a ThreadLocal via RequestContextHolder is overkill here,
-                // so attempt to read Authorization from system properties not feasible. Instead, expect client to set header; try to read via JwtUtil if provided later.
-            } catch (Exception ignore) {
-                // fallback: anonymous
+            // Require Authorization header and associate the user from the JWT
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return new ResponseEntity<>(Map.of("error", "Token de autorización requerido"), HttpStatus.UNAUTHORIZED);
             }
-            // NOTE: the controller method cannot access HttpServletRequest here because create() signature currently lacks it.
-            // We'll attempt to read token if present via a standard approach: check SecurityContext (if Spring Security is configured).
             try {
-                // If JwtUtil and UsuarioService are available, try to read authenticated principal from SecurityContext
-                var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-                if (authentication != null && authentication.isAuthenticated() && authentication.getPrincipal() instanceof String) {
-                    String username = (String) authentication.getPrincipal();
-                    var uOpt = usuarioService.findByUsernameOrEmail(username);
-                    if (uOpt.isPresent()) f.setUsuario(uOpt.get());
+                String token = authHeader.substring(7).trim();
+                Claims claims = jwtUtil.parseToken(token);
+                String username = claims.get("user", String.class);
+                var uOpt = usuarioService.findByUsernameOrEmail(username);
+                if (uOpt.isPresent()) {
+                    f.setUsuario(uOpt.get());
+                } else {
+                    return new ResponseEntity<>(Map.of("error", "Usuario no encontrado"), HttpStatus.NOT_FOUND);
                 }
-            } catch (NoClassDefFoundError | Exception ex) {
-                // If SecurityContext is not configured or other error, ignore and leave feedback anonymous
+            } catch (Exception ex) {
+                return new ResponseEntity<>(Map.of("error", "Token inválido o expirado"), HttpStatus.UNAUTHORIZED);
             }
             Feedback saved = feedbackService.create(f);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
