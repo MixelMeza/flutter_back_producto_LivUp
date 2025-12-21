@@ -31,9 +31,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        // Exclude login, register, public keepalive and solicitudes vencidas endpoint from JWT requirement
-        if ("/api/auth/login".equals(path) || "/api/auth/register".equals(path) || "/api/public/keepalive".equals(path)
-            || "/api/solicitudes-alojamiento/vencidas".equals(path) || "/api/public/backups/run".equals(path)) {
+        // Exclude login, register, verification and other public endpoints from JWT requirement
+        if ("/api/auth/login".equals(path)
+            || "/api/auth/register".equals(path)
+            || "/api/auth/verify".equals(path)
+            || "/api/auth/send-verification-by-token".equals(path)
+            || "/api/auth/resend-verification-by-email".equals(path)
+            || "/api/public/keepalive".equals(path)
+            || "/api/solicitudes-alojamiento/vencidas".equals(path)
+            || "/api/public/backups/run".equals(path)) {
             filterChain.doFilter(request, response);
             return;
         }

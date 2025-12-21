@@ -9,6 +9,7 @@ import java.util.Map;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -46,6 +47,12 @@ public class AuthController {
 
     @Autowired
     private edu.pe.residencias.service.EmailService emailService;
+
+    @org.springframework.beans.factory.annotation.Value("${app.frontend.url:https://flutter-back-producto-livup-2.onrender.com}")
+    private String frontendBaseUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${app.mobile.scheme:}")
+    private String appMobileScheme;
 
     @Autowired
     private edu.pe.residencias.repository.PersonaRepository personaRepository;
@@ -151,8 +158,29 @@ public class AuthController {
             vt.setUsed(true);
             verificationTokenRepository.save(vt);
 
-            html = buildHtmlPage("¡Email verificado!", "Tu correo ha sido verificado correctamente. Bienvenido a LivUp.", true);
-            return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
+            // Build an HTML page that attempts to open the mobile app via custom scheme
+            // If `appMobileScheme` is configured (e.g., "livup://home"), the page will
+            // navigate to that scheme. Otherwise it will redirect to the frontend web URL.
+            String redirectHtml = "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                    + "<title>Verificación completada</title></head><body style=\"font-family:Inter,Roboto,Arial,sans-serif;background:#f6f9fc;color:#0f2740;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;\">"
+                    + "<div style=\"text-align:center;max-width:520px;padding:24px;background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(2,30,66,0.08);\">"
+                    + "<h1 style=\"margin-bottom:12px\">¡Email verificado!</h1><p style=\"margin-bottom:18px;color:#395067\">Tu correo ha sido verificado correctamente. Redirigiendo a la aplicación...</p>";
+
+            String appTarget = (appMobileScheme != null && !appMobileScheme.isBlank()) ? appMobileScheme : "";
+            String frontendTarget = (frontendBaseUrl != null && !frontendBaseUrl.isBlank()) ? frontendBaseUrl : "https://flutter-back-producto-livup-2.onrender.com";
+
+            String js = "<script>";
+            if (!"".equals(appTarget)) {
+                // Try to open app scheme, then fallback to frontend after 1.2s
+                js += "(function(){var opened=false; var timeout=setTimeout(function(){ if(!opened) window.location='" + frontendTarget + "'; },1200); try{ window.location='" + appTarget + "'; opened=true; }catch(e){} })();";
+            } else {
+                // No app scheme configured — go to frontend
+                js += "window.location='" + frontendTarget + "';";
+            }
+            js += "</script>";
+
+            redirectHtml += js + "</div></body></html>";
+            return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(redirectHtml);
         } catch (Exception e) {
             e.printStackTrace();
             String html = buildHtmlPage("Error", "Ocurrió un error interno. Intenta de nuevo más tarde.", false);
@@ -183,10 +211,9 @@ public class AuthController {
                 "<style>body{font-family:Inter,Roboto,Arial,sans-serif;background:#f4f8ff;color:#102135;margin:0;padding:0} .container{max-width:720px;margin:64px auto;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(2,30,66,0.06);padding:48px;text-align:center;border-top:8px solid " + light + ";} h1{color:" + midnight + ";margin:18px 0 8px;font-size:24px} p{color:#324a63;margin:0 0 6px;font-size:16px;line-height:1.4} footer{margin-top:28px;color:#6b7a8a;font-size:13px}</style></head>" +
                 "<body><div class=\"container\">" + icon + "<h1>" + title + "</h1><p>" + message + "</p>";
 
-        // No buttons as requested
-
-        html += "<footer>LivUp &copy; " + java.time.Year.now().getValue() + "</footer></div></body></html>";
-        return html;
+            // No buttons as requested
+            html += "<footer>LivUp &copy; " + java.time.Year.now().getValue() + "</footer></div></body></html>";
+            return html;
     }
 
     // Build a friendly, responsive HTML verification email with CTA button and plain-text fallback
@@ -224,9 +251,7 @@ public class AuthController {
             "    <p style=\"text-align:center;margin:20px 0\">" +
             "      <a class=\"btn\" href=\"" + verifyLink + "\" target=\"_blank\">Verificar mi correo</a>" +
             "    </p>" +
-            "    <p style=\"word-break:break-word;overflow-wrap:break-word;color:#1b4b77;font-size:14px;\">" +
-            "      <a href=\"" + verifyLink + "\" style=\"color:#1b4b77;word-break:break-all;\">" + verifyLink + "</a>" +
-            "    </p>" +
+            // Visible raw link removed — link is only present in the CTA button above
             "    <p class=\"muted\">Si no solicitaste esta verificación, puedes ignorar este correo.</p>" +
             "  </div>" +
             "  <p style=\"text-align:center;color:#9aa7b8;font-size:12px;margin-top:12px\">LivUp &copy; " + java.time.Year.now().getValue() + "</p>" +
@@ -303,7 +328,7 @@ public class AuthController {
 
             // Enviar email de verificación usando el token elegido/creado
             try {
-                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + chosen.getToken();
+                String verifyLink = frontendBaseUrl + "/api/auth/verify?token=" + chosen.getToken();
                 String subject = "Verifica tu correo en LivUp";
                 String plainText = "Para verificar tu correo haz clic en: " + verifyLink;
                 String html = buildVerificationEmailHtml(user.getPersona().getEmail(), verifyLink);
@@ -347,7 +372,7 @@ public class AuthController {
             }
 
             try {
-                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + token;
+                String verifyLink = frontendBaseUrl + "/api/auth/verify?token=" + token;
                 String subject = "Verifica tu correo en LivUp";
                 String plainText = "Para verificar tu correo haz clic en: " + verifyLink;
                 String html = buildVerificationEmailHtml(user.getPersona().getEmail(), verifyLink);
@@ -450,7 +475,7 @@ public class AuthController {
 
             // Enviar email de verificación al nuevo correo
             try {
-                String verifyLink = "https://flutter-back-producto-livup-2.onrender.com/api/auth/verify?token=" + verificationToken;
+                String verifyLink = frontendBaseUrl + "/api/auth/verify?token=" + verificationToken;
                 String subject = "Verifica tu nuevo correo en LivUp";
                 String plainText = "Has cambiado tu correo en LivUp. Para verificar tu nuevo correo haz clic en: " + verifyLink;
                 String html = buildVerificationEmailHtml(newEmail, verifyLink);
