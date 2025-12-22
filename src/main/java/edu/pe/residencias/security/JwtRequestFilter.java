@@ -38,6 +38,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             || "/api/auth/send-verification-by-token".equals(path)
             || "/api/auth/resend-verification-by-email".equals(path)
             || "/api/public/keepalive".equals(path)
+            || "/api/public/app-status".equals(path)
             || "/api/solicitudes-alojamiento/vencidas".equals(path)
             || "/api/public/backups/run".equals(path)) {
             filterChain.doFilter(request, response);
