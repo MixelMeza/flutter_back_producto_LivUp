@@ -59,7 +59,8 @@ public class ResidenciaServiceImpl implements ResidenciaService {
                 }
             } catch (Exception ignore) {}
             if (lat == null || lng == null) continue; // skip entries without coords
-            MapResidenciaDTO dto = new MapResidenciaDTO(r.getId(), r.getNombre() == null ? "" : r.getNombre(), lat, lng, r.getTipo() == null ? "residencia" : r.getTipo());
+            boolean isDest = r.getDestacado() != null ? r.getDestacado() : false;
+            MapResidenciaDTO dto = new MapResidenciaDTO(r.getId(), r.getNombre() == null ? "" : r.getNombre(), lat, lng, r.getTipo() == null ? "residencia" : r.getTipo(), isDest);
             out.add(dto);
         }
         return out;

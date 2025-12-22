@@ -73,6 +73,12 @@ public class Residencia {
     @Column(name = "estado")
     private String estado = "Activo";
 
+    @Column(name = "destacado", nullable = false)
+    private Boolean destacado = false;
+
+    @Column(name = "destacado_fecha")
+    private LocalDateTime destacadoFecha;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
