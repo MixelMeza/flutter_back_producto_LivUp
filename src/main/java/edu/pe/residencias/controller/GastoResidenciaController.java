@@ -23,6 +23,7 @@ import edu.pe.residencias.repository.ResidenciaRepository;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 import edu.pe.residencias.service.GastoResidenciaService;
+import edu.pe.residencias.repository.GastoResidenciaRepository;
 
 @RestController
 @RequestMapping("/api/gastos-residencias")
@@ -33,6 +34,9 @@ public class GastoResidenciaController {
 
     @Autowired
     private ResidenciaRepository residenciaRepository;
+
+    @Autowired
+    private GastoResidenciaRepository gastoResidenciaRepository;
 
     @GetMapping
     public ResponseEntity<List<GastoResidencia>> readAll(
@@ -47,7 +51,7 @@ public class GastoResidenciaController {
 
             // start with residencia filter if provided to reduce data set
             if (residenciaId != null) {
-                gastos = repository.findByResidenciaId(residenciaId);
+                gastos = gastoResidenciaRepository.findByResidenciaId(residenciaId);
             }
 
             // apply other optional filters in-memory
