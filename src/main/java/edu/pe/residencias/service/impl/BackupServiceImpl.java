@@ -8,6 +8,7 @@ import java.sql.Statement;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,8 +92,9 @@ public class BackupServiceImpl implements BackupService {
         byte[] compressed = baos.toByteArray();
 
         Backup b = new Backup();
-        b.setName(name == null || name.isBlank() ? "backup-" + edu.pe.residencias.util.DateTimeUtil.nowLima() : name);
-        b.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+        ZonedDateTime limaNow = edu.pe.residencias.util.DateTimeUtil.nowLimaZoned();
+        b.setName(name == null || name.isBlank() ? "backup-" + edu.pe.residencias.util.DateTimeUtil.formatForFilename(limaNow) : name);
+        b.setCreatedAt(limaNow.toLocalDateTime());
         b.setCreatedBy(createdBy);
         b.setContent(compressed);
         b.setSizeBytes((long) compressed.length);
@@ -145,8 +147,9 @@ public class BackupServiceImpl implements BackupService {
     public Backup saveUploadedBackup(String name, byte[] content, String mimeType, Usuario createdBy) throws Exception {
         if (content == null) throw new IllegalArgumentException("Content is null");
         Backup b = new Backup();
-        b.setName(name == null || name.isBlank() ? "uploaded-backup-" + edu.pe.residencias.util.DateTimeUtil.nowLima() : name);
-        b.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
+        ZonedDateTime limaNow = edu.pe.residencias.util.DateTimeUtil.nowLimaZoned();
+        b.setName(name == null || name.isBlank() ? "uploaded-backup-" + edu.pe.residencias.util.DateTimeUtil.formatForFilename(limaNow) : name);
+        b.setCreatedAt(limaNow.toLocalDateTime());
         b.setCreatedBy(createdBy);
         b.setContent(content);
         b.setSizeBytes((long) content.length);

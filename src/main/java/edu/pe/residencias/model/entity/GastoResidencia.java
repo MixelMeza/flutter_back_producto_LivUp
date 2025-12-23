@@ -2,11 +2,14 @@ package edu.pe.residencias.model.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.PrePersist;
-
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -37,23 +40,50 @@ public class GastoResidencia {
     @JoinColumn(name = "residencia_id", nullable = false)
     private Residencia residencia;
 
-    @Column(name = "concepto")
+    @Column(name = "concepto", length = 100)
     private String concepto;
-
-    @Column(name = "monto", precision = 10, scale = 2)
-    private BigDecimal monto;
-
-    @Column(name = "fecha_gasto")
-    private LocalDate fechaGasto;
 
     @Column(name = "descripcion", columnDefinition = "TEXT")
     private String descripcion;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_gasto", length = 32)
+    private TipoGasto tipoGasto;
+
+    @Column(name = "periodo", length = 7)
+    private String periodo;
+
+    @Column(name = "fecha_gasto")
+    private LocalDate fechaGasto;
+
+    @Column(name = "monto", precision = 10, scale = 2)
+    private BigDecimal monto;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "estado_pago", length = 16)
+    private EstadoPago estadoPago = EstadoPago.PENDIENTE;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "metodo_pago", length = 24)
+    private MetodoPago metodoPago;
+
+    @Column(name = "comprobante_url", length = 255)
+    private String comprobanteUrl;
+
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+
     @PrePersist
     public void prePersist() {
         if (fechaGasto == null) {
-            fechaGasto = LocalDate.now();
+            fechaGasto = edu.pe.residencias.util.DateTimeUtil.nowLima().toLocalDate();
         }
+        if (createdAt == null) createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        if (createdAt == null) createdAt = java.time.LocalDateTime.now();
     }
 
         @Override
@@ -67,5 +97,17 @@ public class GastoResidencia {
         @Override
         public int hashCode() {
             return id != null ? id.hashCode() : 0;
+        }
+
+        public enum TipoGasto {
+            AGUA, LUZ, INTERNET, GAS, MANTENIMIENTO, LIMPIEZA, OTRO
+        }
+
+        public enum EstadoPago {
+            PENDIENTE, PAGADO, VENCIDO
+        }
+
+        public enum MetodoPago {
+            EFECTIVO, TRANSFERENCIA, YAPE, PLIN, TARJETA
         }
 }
