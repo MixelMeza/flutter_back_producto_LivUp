@@ -59,6 +59,15 @@ public class ResidenciaServiceImpl implements ResidenciaService {
                 }
             } catch (Exception ignore) {}
             if (lat == null || lng == null) continue; // skip entries without coords
+            // respect visibility and estado: skip if explicitly not visible or estado is Oculto/Eliminado
+            try {
+                if (r.getVisible() != null && !r.getVisible()) continue;
+                String estado = r.getEstado();
+                if (estado != null) {
+                    String norm = estado.trim().toLowerCase();
+                    if (norm.equals("eliminado") || norm.equals("oculto")) continue;
+                }
+            } catch (Exception ignore) {}
             boolean isDest = r.getDestacado() != null ? r.getDestacado() : false;
             MapResidenciaDTO dto = new MapResidenciaDTO(r.getId(), r.getNombre() == null ? "" : r.getNombre(), lat, lng, r.getTipo() == null ? "residencia" : r.getTipo(), isDest);
             out.add(dto);
@@ -178,29 +187,49 @@ public class ResidenciaServiceImpl implements ResidenciaService {
             rating = Math.round(avg * 10.0) / 10.0;
         }
 
-        // precio desde: min precio mensual among available habitaciones
+        // precio desde: consider only habitaciones that are visible and not ELIMINADO
         java.math.BigDecimal precioDesde = null;
+        java.util.List<edu.pe.residencias.model.entity.Habitacion> filteredRooms = new java.util.ArrayList<>();
         try {
-                java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaIdAndEstado(id, edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE);
-            if (hs == null || hs.isEmpty()) {
-                // fallback to any habitaciones
-                hs = habitacionRepository.findByResidenciaId(id);
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> allRooms = habitacionRepository.findByResidenciaId(id);
+            if (allRooms == null) allRooms = java.util.Collections.emptyList();
+            for (var h : allRooms) {
+                try {
+                    if (h == null) continue;
+                    if (h.getVisible() != null && !h.getVisible()) continue;
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) continue;
+                    filteredRooms.add(h);
+                } catch (Exception ignore) {}
             }
-            if (hs != null && !hs.isEmpty()) {
-                java.math.BigDecimal min = null;
-                for (edu.pe.residencias.model.entity.Habitacion h : hs) {
+
+            // prefer DISPONIBLE rooms for price
+            java.math.BigDecimal min = null;
+            for (var h : filteredRooms) {
+                if (h == null || h.getPrecioMensual() == null) continue;
+                if (edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE.equals(h.getEstado())) {
+                    if (min == null || h.getPrecioMensual().compareTo(min) < 0) min = h.getPrecioMensual();
+                }
+            }
+            if (min == null) {
+                for (var h : filteredRooms) {
                     if (h == null || h.getPrecioMensual() == null) continue;
                     if (min == null || h.getPrecioMensual().compareTo(min) < 0) min = h.getPrecioMensual();
                 }
-                precioDesde = min;
             }
+            precioDesde = min;
         } catch (Exception ignored) {}
 
-        // habitaciones totals and disponibles
+        // habitaciones totals and disponibles: count only filteredRooms
         int total = 0;
         int disponibles = 0;
-        try { total = (int) habitacionRepository.countByResidenciaId(id); } catch (Exception ignored) {}
-        try { disponibles = (int) habitacionRepository.countByResidenciaIdAndEstado(id, edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE); } catch (Exception ignored) {}
+        try {
+            total = filteredRooms.size();
+            for (var h : filteredRooms) {
+                try {
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE.equals(h.getEstado())) disponibles++;
+                } catch (Exception ignore) {}
+            }
+        } catch (Exception ignored) {}
 
         edu.pe.residencias.model.dto.ResidenciaCardDTO dto = new edu.pe.residencias.model.dto.ResidenciaCardDTO();
         dto.setId(r.getId());

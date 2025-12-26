@@ -79,6 +79,9 @@ public class Residencia {
     @Column(name = "destacado_fecha")
     private LocalDateTime destacadoFecha;
 
+    @Column(name = "visible", nullable = false)
+    private Boolean visible = true;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -107,6 +110,8 @@ public class Residencia {
         if (this.createdAt == null) {
             this.createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
+        if (this.visible == null) this.visible = true;
+        if (this.destacado == null) this.destacado = false;
     }
 
     @Override

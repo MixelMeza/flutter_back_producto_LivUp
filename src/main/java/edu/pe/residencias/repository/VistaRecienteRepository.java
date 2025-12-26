@@ -24,4 +24,7 @@ public interface VistaRecienteRepository extends JpaRepository<VistaReciente, Lo
     List<VistaReciente> findRecentBySessionUuid(@Param("sessionUuid") String sessionUuid, Pageable pageable);
 
     void deleteByUsuarioIdAndHabitacionId(Long usuarioId, Long habitacionId);
+
+    // Count total distinct views for a habitacion (both session and user entries counted)
+    long countByHabitacionId(Long habitacionId);
 }

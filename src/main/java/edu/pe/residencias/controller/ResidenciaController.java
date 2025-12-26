@@ -91,6 +91,8 @@ public class ResidenciaController {
 
     @Autowired
     private edu.pe.residencias.repository.ImagenHabitacionRepository imagenHabitacionRepository;
+    @Autowired
+    private edu.pe.residencias.repository.VistaRecienteRepository vistaRecienteRepository;
 
     @GetMapping
     public ResponseEntity<List<Residencia>> readAll() {
@@ -133,6 +135,8 @@ public class ResidenciaController {
             // build entity
             edu.pe.residencias.model.entity.Habitacion h = new edu.pe.residencias.model.entity.Habitacion();
             h.setResidencia(residencia);
+            // ensure visible by default when creating
+            if (h.getVisible() == null) h.setVisible(true);
             if (body.getCodigoHabitacion() != null) h.setCodigoHabitacion(body.getCodigoHabitacion());
             if (body.getNombre() != null) h.setNombre(body.getNombre());
             if (body.getDepartamento() != null) h.setDepartamento(body.getDepartamento());
@@ -312,11 +316,29 @@ public class ResidenciaController {
                 dto.setImagenes(imgs);
             }
 
-            // habitaciones totals and occupied
-            long totalRooms = habitacionRepository.countByResidenciaId(r.getId());
-            long occupiedRooms = contratoRepository.countDistinctHabitacionesByResidenciaIdAndEstado(r.getId(), "vigente");
-            dto.setHabitacionesTotales((int) totalRooms);
-            dto.setHabitacionesOcupadas((int) occupiedRooms);
+            // habitaciones totals, disponibles y ocupadas (owner view)
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> allRooms = habitacionRepository.findByResidenciaId(r.getId());
+            if (allRooms == null) allRooms = java.util.Collections.emptyList();
+            int totalRooms = 0;
+            int disponibles = 0;
+            int ocupadas = 0;
+            for (var h : allRooms) {
+                try {
+                    if (h == null) continue;
+                    // skip eliminated rooms from totals
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) continue;
+                    totalRooms++;
+                    boolean visible = !(h.getVisible() != null && !h.getVisible());
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE.equals(h.getEstado()) && visible) {
+                        disponibles++;
+                    }
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.NO_DISPONIBLE.equals(h.getEstado())) {
+                        ocupadas++;
+                    }
+                } catch (Exception ignored) {}
+            }
+            dto.setHabitacionesTotales(totalRooms);
+            dto.setHabitacionesOcupadas(ocupadas);
 
             // ingresos
             java.util.List<String> acceptedStates = java.util.Arrays.asList("pagado", "completado", "paid");
@@ -384,6 +406,10 @@ public class ResidenciaController {
 
             List<SimpleResidenciaDTO> list = new ArrayList<>();
             for (var r : residencias) {
+                // skip residencias in ELIMINADO state for owner's simple list
+                try {
+                    if (r.getEstado() != null && r.getEstado().trim().equalsIgnoreCase("eliminado")) continue;
+                } catch (Exception ignored) {}
                 SimpleResidenciaDTO s = new SimpleResidenciaDTO();
                 s.setId(r.getId());
                 s.setNombre(r.getNombre());
@@ -410,10 +436,28 @@ public class ResidenciaController {
                     s.setImagen(null);
                 }
 
-                long totalRooms = habitacionRepository.countByResidenciaId(r.getId());
-                long occupiedRooms = contratoRepository.countDistinctHabitacionesByResidenciaIdAndEstado(r.getId(), "vigente");
-                s.setHabitacionesTotales((int) totalRooms);
-                s.setHabitacionesOcupadas((int) occupiedRooms);
+                java.util.List<edu.pe.residencias.model.entity.Habitacion> allRoomsForCounts = habitacionRepository.findByResidenciaId(r.getId());
+                if (allRoomsForCounts == null) allRoomsForCounts = java.util.Collections.emptyList();
+                int totalRooms = 0;
+                int disponibles = 0;
+                int ocupadas = 0;
+                for (var h : allRoomsForCounts) {
+                    try {
+                        if (h == null) continue;
+                        // exclude eliminated rooms from totals
+                        if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) continue;
+                        totalRooms++;
+                        boolean visible = !(h.getVisible() != null && !h.getVisible());
+                        if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.DISPONIBLE.equals(h.getEstado()) && visible) {
+                            disponibles++;
+                        }
+                        if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.NO_DISPONIBLE.equals(h.getEstado())) {
+                            ocupadas++;
+                        }
+                    } catch (Exception ignored) {}
+                }
+                s.setHabitacionesTotales(totalRooms);
+                s.setHabitacionesOcupadas(ocupadas);
 
                 java.util.List<String> acceptedStates = java.util.Arrays.asList("pagado", "completado", "paid");
                 java.math.BigDecimal ingresos = pagoRepository.sumPagosByResidenciaIdAndEstados(r.getId(), acceptedStates);
@@ -559,6 +603,8 @@ public class ResidenciaController {
                     return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body("Email no verificado");
                 }
                 residencia.setUsuario(usuario);
+                // ensure visible by default when creating
+                if (residencia.getVisible() == null) residencia.setVisible(true);
             } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
                 return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
             } catch (Exception ex) {
@@ -625,8 +671,12 @@ public class ResidenciaController {
             var residenciaOpt = residenciaRepository.findById(id);
             if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
 
-            // try to resolve authenticated user (optional)
+            // try to resolve authenticated user (optional) and determine role (admin/owner/other)
             Long currentUserId = null;
+            edu.pe.residencias.model.entity.Usuario requester = null;
+            boolean isAdmin = false;
+            boolean isOwner = false;
+            var residencia = residenciaOpt.get();
             try {
                 String authHeader = org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes
                     ? ((org.springframework.web.context.request.ServletRequestAttributes)org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes()).getRequest().getHeader("Authorization")
@@ -637,7 +687,16 @@ public class ResidenciaController {
                     String uid = claims.get("uid", String.class);
                     if (uid != null && !uid.isBlank()) {
                         var uOpt = usuarioRepository.findByUuid(uid);
-                        if (uOpt.isPresent()) currentUserId = uOpt.get().getId();
+                        if (uOpt.isPresent()) {
+                            requester = uOpt.get();
+                            currentUserId = requester.getId();
+                            try {
+                                if (requester.getRol() != null && "admin".equalsIgnoreCase(requester.getRol().getNombre())) isAdmin = true;
+                            } catch (Exception ignore) {}
+                            try {
+                                if (residencia.getUsuario() != null && residencia.getUsuario().getId() != null && requester.getId() != null && residencia.getUsuario().getId().equals(requester.getId())) isOwner = true;
+                            } catch (Exception ignore) {}
+                        }
                     }
                 }
             } catch (Exception ignored) { }
@@ -647,6 +706,24 @@ public class ResidenciaController {
 
             java.util.List<edu.pe.residencias.model.dto.HabitacionPreviewDTO> out = new java.util.ArrayList<>();
             for (var h : hs) {
+                if (h == null) continue;
+                try {
+                    if (isAdmin) {
+                        // admin sees everything
+                    } else if (isOwner) {
+                        // owner: hide only ELIMINADO
+                        if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) continue;
+                    } else {
+                        // tenant / public: hide if not visible, NO_DISPONIBLE or ELIMINADO
+                        if (h.getVisible() != null && !h.getVisible()) continue;
+                        if (h.getEstado() != null) {
+                            if (edu.pe.residencias.model.enums.HabitacionEstado.NO_DISPONIBLE.equals(h.getEstado()) ||
+                                edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) {
+                                continue;
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
                 String img = null;
                 try {
                     java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
@@ -695,6 +772,17 @@ public class ResidenciaController {
                 }
                 out.add(dto);
             }
+
+            // Put highlighted rooms first
+            try {
+                out.sort((a, b) -> {
+                    boolean da = Boolean.TRUE.equals(a.getDestacado());
+                    boolean db = Boolean.TRUE.equals(b.getDestacado());
+                    if (da && !db) return -1;
+                    if (!da && db) return 1;
+                    return 0;
+                });
+            } catch (Exception ignore) {}
 
             return new ResponseEntity<>(out, HttpStatus.OK);
         } catch (Exception e) {
@@ -750,9 +838,318 @@ public class ResidenciaController {
                 out.add(dto);
             }
 
+            // Ensure highlighted rooms appear first
+            try {
+                out.sort((x,y) -> {
+                    boolean dx = Boolean.TRUE.equals(x.getDestacado());
+                    boolean dy = Boolean.TRUE.equals(y.getDestacado());
+                    if (dx && !dy) return -1;
+                    if (!dx && dy) return 1;
+                    return 0;
+                });
+            } catch (Exception ignore) {}
+
             return new ResponseEntity<>(out, HttpStatus.OK);
         } catch (Exception e) {
             logger.error("Error in /api/residencias/{id}/habitaciones (full)", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // GET residencia status (owner or admin)
+    @GetMapping("/{id}/status")
+    public ResponseEntity<?> getResidenciaStatus(HttpServletRequest request, @PathVariable("id") Long id) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(id);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            java.util.Map<String, Object> resp = new java.util.HashMap<>();
+            resp.put("id", residencia.getId());
+            resp.put("estado", residencia.getEstado());
+            return new ResponseEntity<>(resp, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in GET /api/residencias/{id}/status", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // PUT residencia status - only allow ACTIVO, OCULTO, ELIMINADO (owner or admin)
+    @PutMapping("/{id}/status")
+    public ResponseEntity<?> updateResidenciaStatus(HttpServletRequest request, @PathVariable("id") Long id, @RequestBody java.util.Map<String, String> body) {
+        try {
+            String newEstado = body == null ? null : body.get("estado");
+            if (newEstado == null || newEstado.isBlank()) return ResponseEntity.badRequest().body("estado requerido");
+            String normalized = newEstado.trim();
+            // Accept either names or display values
+            boolean allowed = false;
+            for (edu.pe.residencias.model.enums.ResidenciaEstado e : edu.pe.residencias.model.enums.ResidenciaEstado.values()) {
+                if (e.name().equalsIgnoreCase(normalized) || e.toString().equalsIgnoreCase(normalized)) {
+                    if (e == edu.pe.residencias.model.enums.ResidenciaEstado.ACTIVO || e == edu.pe.residencias.model.enums.ResidenciaEstado.OCULTO || e == edu.pe.residencias.model.enums.ResidenciaEstado.ELIMINADO) {
+                        normalized = e.toString();
+                        allowed = true;
+                    }
+                    break;
+                }
+            }
+            if (!allowed) return ResponseEntity.badRequest().body("estado inválido; permitido: Activo, Oculto, Eliminado");
+
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            Optional<Residencia> opt = residenciaService.read(id);
+            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            Residencia existing = opt.get();
+            if (!isOwnerOrAdmin(usuario, existing)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            existing.setEstado(normalized);
+            Residencia updated = residenciaService.update(existing);
+            return new ResponseEntity<>(updated, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in PUT /api/residencias/{id}/status", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // PUT mark habitacion as ELIMINADO (owner or admin)
+    @PutMapping("/{residenciaId}/habitaciones/{habitacionId}/eliminar")
+    public ResponseEntity<?> eliminarHabitacion(HttpServletRequest request, @PathVariable("residenciaId") Long residenciaId, @PathVariable("habitacionId") Long habitacionId) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(residenciaId);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            var habitacionOpt = habitacionRepository.findById(habitacionId);
+            if (habitacionOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var habitacion = habitacionOpt.get();
+            if (habitacion.getResidencia() == null || habitacion.getResidencia().getId() == null || !habitacion.getResidencia().getId().equals(residenciaId)) {
+                return ResponseEntity.badRequest().body("La habitación no pertenece a la residencia indicada");
+            }
+
+            // If the room was marked as destacado, unset it when deleting
+            try {
+                if (Boolean.TRUE.equals(habitacion.getDestacado())) {
+                    habitacion.setDestacado(false);
+                }
+            } catch (Exception ignore) {}
+            habitacion.setEstado(edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO);
+            habitacionRepository.save(habitacion);
+            return new ResponseEntity<>(habitacion, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in PUT eliminar habitacion", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // PUT mark habitacion as DESTACADO (owner or admin)
+    @PutMapping("/{residenciaId}/habitaciones/{habitacionId}/destacar")
+    public ResponseEntity<?> destacarHabitacion(HttpServletRequest request, @PathVariable("residenciaId") Long residenciaId, @PathVariable("habitacionId") Long habitacionId) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(residenciaId);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            var habitacionOpt = habitacionRepository.findById(habitacionId);
+            if (habitacionOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var habitacion = habitacionOpt.get();
+            if (habitacion.getResidencia() == null || habitacion.getResidencia().getId() == null || !habitacion.getResidencia().getId().equals(residenciaId)) {
+                return ResponseEntity.badRequest().body("La habitación no pertenece a la residencia indicada");
+            }
+
+            habitacion.setDestacado(Boolean.TRUE);
+            // persist change
+            habitacionRepository.save(habitacion);
+            return new ResponseEntity<>(habitacion, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in PUT destacar habitacion", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // PUT remove destacado from habitacion (owner or admin)
+    @PutMapping("/{residenciaId}/habitaciones/{habitacionId}/quitar-destacado")
+    public ResponseEntity<?> quitarDestacadoHabitacion(HttpServletRequest request, @PathVariable("residenciaId") Long residenciaId, @PathVariable("habitacionId") Long habitacionId) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(residenciaId);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            var habitacionOpt = habitacionRepository.findById(habitacionId);
+            if (habitacionOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var habitacion = habitacionOpt.get();
+            if (habitacion.getResidencia() == null || habitacion.getResidencia().getId() == null || !habitacion.getResidencia().getId().equals(residenciaId)) {
+                return ResponseEntity.badRequest().body("La habitación no pertenece a la residencia indicada");
+            }
+
+            habitacion.setDestacado(Boolean.FALSE);
+            habitacionRepository.save(habitacion);
+            return new ResponseEntity<>(habitacion, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in PUT quitar destacado habitacion", e);
+            return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // GET habitaciones stats (owner or admin)
+    @GetMapping("/{id}/habitaciones/stats")
+    public ResponseEntity<?> getHabitacionesStats(HttpServletRequest request, @PathVariable("id") Long id) {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Falta Authorization header");
+            }
+            String token = authHeader.substring("Bearer ".length()).trim();
+            var claims = jwtUtil.parseToken(token);
+            String uid = claims.get("uid", String.class);
+            if (uid == null || uid.isBlank()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido: uid faltante");
+            var usuarioOpt = usuarioRepository.findByUuid(uid);
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            var usuario = usuarioOpt.get();
+
+            var residenciaOpt = residenciaRepository.findById(id);
+            if (residenciaOpt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            var residencia = residenciaOpt.get();
+            if (!isOwnerOrAdmin(usuario, residencia)) return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+
+            java.util.List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaId(id);
+            if (hs == null) hs = java.util.Collections.emptyList();
+
+            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+            for (var h : hs) {
+                if (h == null) continue;
+                try {
+                    // skip ELIMINADO rooms
+                    if (h.getEstado() != null && edu.pe.residencias.model.enums.HabitacionEstado.ELIMINADO.equals(h.getEstado())) continue;
+                    java.util.Map<String, Object> m = new java.util.HashMap<>();
+                    m.put("id", h.getId());
+                    m.put("nombre", h.getNombre());
+                    m.put("estado", h.getEstado() == null ? null : h.getEstado().name());
+                    m.put("precioMensual", h.getPrecioMensual());
+                    m.put("destacado", h.getDestacado());
+                    m.put("createdAt", h.getCreatedAt());
+                    // main image
+                    String img = null;
+                    java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+                    if (imgs != null && !imgs.isEmpty()) {
+                        edu.pe.residencias.model.entity.ImagenHabitacion chosen = null;
+                        for (var im : imgs) {
+                            if (im == null) continue;
+                            if (im.getOrden() != null && im.getOrden() == 1) { chosen = im; break; }
+                            if (chosen == null) { chosen = im; continue; }
+                            int oChosen = chosen.getOrden() == null ? Integer.MAX_VALUE : chosen.getOrden();
+                            int oCur = im.getOrden() == null ? Integer.MAX_VALUE : im.getOrden();
+                            if (oCur < oChosen) chosen = im;
+                        }
+                        if (chosen != null) img = chosen.getUrl();
+                    }
+                    m.put("imagenPrincipal", img);
+                    // likes
+                    long likes = favoritoService.countLikes(h.getId());
+                    m.put("likes", likes);
+                    // vistas (use repository count)
+                    long vistas = 0L;
+                    try {
+                        vistas = vistaRecienteRepository.countByHabitacionId(h.getId());
+                    } catch (Exception ex) {
+                        vistas = 0L;
+                    }
+                    m.put("vistas", vistas);
+                    out.add(m);
+                } catch (Exception ignored) {}
+            }
+
+            // sort: highlighted first, then by createdAt desc
+            out.sort((a,b) -> {
+                try {
+                    boolean da = Boolean.TRUE.equals((Boolean)a.get("destacado"));
+                    boolean db = Boolean.TRUE.equals((Boolean)b.get("destacado"));
+                    if (da && !db) return -1;
+                    if (!da && db) return 1;
+                } catch (Exception ignored) {}
+                java.time.LocalDateTime ta = (java.time.LocalDateTime) a.get("createdAt");
+                java.time.LocalDateTime tb = (java.time.LocalDateTime) b.get("createdAt");
+                if (ta == null && tb == null) return 0;
+                if (ta == null) return 1;
+                if (tb == null) return -1;
+                return tb.compareTo(ta);
+            });
+
+            return new ResponseEntity<>(out, HttpStatus.OK);
+        } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body("Token inválido");
+        } catch (Exception e) {
+            logger.error("Error in GET /api/residencias/{id}/habitaciones/stats", e);
             return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }

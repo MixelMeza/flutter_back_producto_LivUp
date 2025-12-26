@@ -3,6 +3,7 @@ package edu.pe.residencias.model.enums;
 public enum ResidenciaEstado {
     ACTIVO("Activo"),
     ELIMINADO("Eliminado"),
+    OCULTO("Oculto"),
     INACTIVO("Inactivo"),
     SUSPENDIDO("Suspendido");
 

@@ -36,6 +36,8 @@ public class Habitacion {
         if (this.createdAt == null) {
             this.createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
         }
+        if (this.visible == null) this.visible = true;
+        if (this.destacado == null) this.destacado = false;
     }
 
     @Id
@@ -96,6 +98,9 @@ public class Habitacion {
 
     @Column(name = "destacado", nullable = false)
     private Boolean destacado = false;
+
+    @Column(name = "visible", nullable = false)
+    private Boolean visible = true;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

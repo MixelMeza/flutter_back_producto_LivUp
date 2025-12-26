@@ -4,7 +4,8 @@ public enum HabitacionEstado {
     DISPONIBLE("Disponible"),
     RESERVADO("Reservado"),
     OCUPADO("Ocupado"),
-    NO_DISPONIBLE("No disponible");
+    NO_DISPONIBLE("No disponible"),
+    ELIMINADO("Eliminado");
 
     private final String label;
 
@@ -26,6 +27,7 @@ public enum HabitacionEstado {
             case "no_disponible":
             case "no-disponible":
             case "no disponible": return NO_DISPONIBLE;
+            case "eliminado": return ELIMINADO;
             default:
                 // try matching enum name
                 try {
