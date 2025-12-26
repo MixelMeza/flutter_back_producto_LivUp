@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.*;
 import java.math.BigDecimal;
+import java.text.Normalizer;
 
 @RestController
 @RequestMapping("/api")
@@ -37,6 +38,7 @@ public class SearchController {
             }
 
             String q = body == null || body.get("q") == null ? null : body.get("q").toString().trim();
+            String qNorm = normalize(q);
 
             BigDecimal lat = null, lng = null, radioKm = null;
             try { if (body.get("lat") != null) lat = toBigDecimal(body.get("lat")); } catch (Exception ignored) {}
@@ -82,15 +84,18 @@ public class SearchController {
                         if (h == null) continue;
                         try {
                             if (!applyHabitacionFilters(h, habitacionFilters, precioMin, precioMax)) continue;
-                            int s = 0; if (q != null && !q.isBlank()) { s = textMatchScore(q, r, h); if (s == 0) continue; }
+                            int s = 0; if (qNorm != null && !qNorm.isEmpty()) { s = textMatchScore(qNorm, r, h); if (s == 0) continue; }
                             long likes = favoritoService.countLikes(h.getId());
                             long vistas = 0L; try { vistas = vistaRecienteRepository.countByHabitacionId(h.getId()); } catch (Exception ignored) {}
                             Map<String,Object> m = new HashMap<>();
                             m.put("residenciaId", r.getId());
                             m.put("habitacionId", h.getId());
                             if (r.getUbicacion() != null) { m.put("lat", r.getUbicacion().getLatitud()); m.put("lng", r.getUbicacion().getLongitud()); } else { m.put("lat", null); m.put("lng", null); }
-                            // destacado is considered at residencia level (residencia.destacado) or habitacion.destacado
-                            boolean destacado = Boolean.TRUE.equals(r.getDestacado()) || Boolean.TRUE.equals(h.getDestacado());
+                            // Destacado: Option A - only if residencia is destacado (ignore habitacion.destacado)
+                            boolean destacado = Boolean.TRUE.equals(r == null ? null : r.getDestacado());
+                            if (Boolean.TRUE.equals(h == null ? null : h.getDestacado()) && !destacado) {
+                                System.out.println(String.format("Habitacion destacado ignored because residencia not destacado: residenciaId=%s habitacionId=%s", String.valueOf(r == null ? null : r.getId()), String.valueOf(h == null ? null : h.getId())));
+                            }
                             m.put("destacado", destacado);
                             m.put("textScore", s);
                             m.put("likes", likes);
@@ -107,22 +112,30 @@ public class SearchController {
                 for (var r : filteredResidencias) {
                     List<edu.pe.residencias.model.entity.Habitacion> hs = habitacionRepository.findByResidenciaId(r.getId());
                     if (hs == null) hs = Collections.emptyList();
-                    long likesSum = 0L; long vistasSum = 0L; int textScore = 0; boolean anyDestacado = Boolean.TRUE.equals(r.getDestacado()); java.time.LocalDateTime latestCreated = null;
+                    long likesSum = 0L; long vistasSum = 0L; int textScore = 0; boolean anyDestacado = (r != null && Boolean.TRUE.equals(r.getDestacado())); java.time.LocalDateTime latestCreated = null;
+
+                    // Match residencia itself first so residencias without habitaciones can match
+                    if (qNorm != null && !qNorm.isEmpty()) {
+                        textScore = textMatchScore(qNorm, r, null);
+                    }
+
                     for (var h : hs) {
                         if (h == null) continue;
                         try {
                             likesSum += favoritoService.countLikes(h.getId());
                             try { vistasSum += vistaRecienteRepository.countByHabitacionId(h.getId()); } catch (Exception ignored) {}
-                            if (Boolean.TRUE.equals(h.getDestacado())) anyDestacado = true;
+                            // do NOT propagate habitacion.destacado to residencia (Option A)
                             if (h.getCreatedAt() != null && (latestCreated == null || h.getCreatedAt().isAfter(latestCreated))) latestCreated = h.getCreatedAt();
-                            if (q != null && !q.isBlank()) textScore += textMatchScore(q, r, h);
+                            if (qNorm != null && !qNorm.isEmpty()) textScore += textMatchScoreHabitacion(qNorm, h);
                         } catch (Exception ignored) {}
                     }
-                    if (q != null && !q.isBlank() && textScore == 0) continue;
+                    if (qNorm != null && !qNorm.isEmpty() && textScore == 0) continue;
                     Map<String,Object> m = new HashMap<>();
                     m.put("residenciaId", r.getId());
                     if (r.getUbicacion() != null) { m.put("lat", r.getUbicacion().getLatitud()); m.put("lng", r.getUbicacion().getLongitud()); } else { m.put("lat", null); m.put("lng", null); }
-                    m.put("destacado", anyDestacado); m.put("textScore", textScore); m.put("likes", likesSum); m.put("vistas", vistasSum); m.put("createdAt", latestCreated == null ? r.getCreatedAt() : latestCreated);
+                    // Destacado ONLY if residencia is destacado (Option A)
+                    boolean finalDestacado = Boolean.TRUE.equals(r == null ? null : r.getDestacado());
+                    m.put("destacado", finalDestacado); m.put("textScore", textScore); m.put("likes", likesSum); m.put("vistas", vistasSum); m.put("createdAt", latestCreated == null ? r.getCreatedAt() : latestCreated);
                     results.add(m);
                 }
                 results.sort(this::compareResults);
@@ -202,7 +215,27 @@ public class SearchController {
             Object universidadId = filters.get("universidadId"); if (universidadId != null) { try { long uid = ((Number)universidadId).longValue(); if (r.getUniversidad() == null || r.getUniversidad().getId() == null || r.getUniversidad().getId() != uid) return false; } catch (Exception ignored) {} }
             Object estado = filters.get("estado"); if (estado != null) { String est = estado.toString().trim(); if (r.getEstado() == null || !r.getEstado().equalsIgnoreCase(est)) return false; }
             // Nota: 'visible' y 'destacado' no se usan como filtros aquí (visible se aplica como exclusión implícita; destacado solo para ordenamiento)
-            Object servicios = filters.get("servicios"); if (servicios != null && r.getServicios() != null) { String servFilter = servicios.toString().toLowerCase(); if (!r.getServicios().toLowerCase().contains(servFilter)) return false; }
+            Object servicios = filters.get("servicios");
+            if (servicios != null && r.getServicios() != null) {
+                try {
+                    String rServ = normalize(r.getServicios());
+                    List<String> required = new ArrayList<>();
+                    if (servicios instanceof Collection) {
+                        for (Object o : (Collection) servicios) if (o != null) required.add(o.toString().trim());
+                    } else {
+                        String s = servicios.toString();
+                        if (s.contains(",")) {
+                            for (String p : s.split(",")) required.add(p.trim());
+                        } else {
+                            required.add(s.trim());
+                        }
+                    }
+                    for (String req : required) {
+                        if (req == null || req.isBlank()) continue;
+                        if (!residenciaHasService(rServ, req)) return false;
+                    }
+                } catch (Exception ignored) { return false; }
+            }
         } catch (Exception ignored) {}
         return true;
     }
@@ -214,13 +247,56 @@ public class SearchController {
             if (h.getEstado() != null && "ELIMINADO".equalsIgnoreCase(h.getEstado().name())) return false;
             if (h.getVisible() == null || !h.getVisible()) return false;
         } catch (Exception ignored) {}
-        if (filters != null && !filters.isEmpty()) {
+            if (filters != null && !filters.isEmpty()) {
             try {
                 Object capacidad = filters.get("capacidad"); if (capacidad != null) { try { int c = ((Number)capacidad).intValue(); if (h.getCapacidad() == null || h.getCapacidad() < c) return false; } catch (Exception ignored) {} }
                 Object piso = filters.get("piso"); if (piso != null) { try { int p = ((Number)piso).intValue(); if (h.getPiso() == null || h.getPiso() != p) return false; } catch (Exception ignored) {} }
                 Object amueblado = filters.get("amueblado"); if (amueblado != null) { try { boolean a = Boolean.parseBoolean(amueblado.toString()); if (h.getAmueblado() == null || h.getAmueblado() != a) return false; } catch (Exception ignored) {} }
-                Object wifi = filters.get("wifi"); if (wifi != null) { try { boolean w = Boolean.parseBoolean(wifi.toString()); if (h.getWifi() == null || h.getWifi() != w) return false; } catch (Exception ignored) {} }
-                Object banoPrivado = filters.get("banoPrivado"); if (banoPrivado != null) { try { boolean b = Boolean.parseBoolean(banoPrivado.toString()); if (h.getBanoPrivado() == null || h.getBanoPrivado() != b) return false; } catch (Exception ignored) {} }
+
+                // Diferenciar filtros según filtro 'departamento' enviado por el cliente.
+                // Si el cliente especifica `departamento` (boolean), entonces:
+                //  - forzamos que la habitación coincida con ese tipo
+                //  - aplicamos sólo los filtros de servicios correspondientes a ese tipo
+                // Si no lo especifica (cualquiera), NO aplicamos filtros tipo-específicos (wifi/bañoPrivado vs agua/luz/terma).
+                Object tipoDepartamentoFilter = filters.get("departamento");
+                Boolean tipoDep = null;
+                try { if (tipoDepartamentoFilter != null) tipoDep = Boolean.parseBoolean(tipoDepartamentoFilter.toString()); } catch (Exception ignored) {}
+
+                // gather service filters (if present)
+                Boolean wantAgua = null; Boolean wantLuz = null; Boolean wantTerma = null; Boolean wantWifi = null; Boolean wantBanoPrivado = null;
+                try { if (filters.get("agua") != null) wantAgua = Boolean.parseBoolean(filters.get("agua").toString()); } catch (Exception ignored) {}
+                try { if (filters.get("luz") != null) wantLuz = Boolean.parseBoolean(filters.get("luz").toString()); } catch (Exception ignored) {}
+                try { if (filters.get("terma") != null) wantTerma = Boolean.parseBoolean(filters.get("terma").toString()); } catch (Exception ignored) {}
+                try { if (filters.get("wifi") != null) wantWifi = Boolean.parseBoolean(filters.get("wifi").toString()); } catch (Exception ignored) {}
+                try { if (filters.get("banoPrivado") != null) wantBanoPrivado = Boolean.parseBoolean(filters.get("banoPrivado").toString()); } catch (Exception ignored) {}
+
+                if (tipoDep != null) {
+                    // enforce requested type
+                    if (tipoDep && !Boolean.TRUE.equals(h.getDepartamento())) return false;
+                    if (!tipoDep && Boolean.TRUE.equals(h.getDepartamento())) return false;
+
+                    // apply only filters relevant to that type
+                    if (tipoDep) {
+                        if (wantAgua != null) { if (h.getAgua() == null || h.getAgua() != wantAgua) return false; }
+                        if (wantLuz != null) { if (h.getLuz() == null || h.getLuz() != wantLuz) return false; }
+                        if (wantTerma != null) { if (h.getTerma() == null || h.getTerma() != wantTerma) return false; }
+                    } else {
+                        if (wantWifi != null) { if (h.getWifi() == null || h.getWifi() != wantWifi) return false; }
+                        if (wantBanoPrivado != null) { if (h.getBanoPrivado() == null || h.getBanoPrivado() != wantBanoPrivado) return false; }
+                    }
+                } else {
+                    // tipo not specified: if any service filters provided, accept rooms matching ANY of them (OR across services)
+                    boolean anyServiceFilterProvided = (wantAgua != null) || (wantLuz != null) || (wantTerma != null) || (wantWifi != null) || (wantBanoPrivado != null);
+                    if (anyServiceFilterProvided) {
+                        boolean matches = false;
+                        if (wantAgua != null && Boolean.TRUE.equals(h.getAgua()) && wantAgua) matches = true;
+                        if (wantLuz != null && Boolean.TRUE.equals(h.getLuz()) && wantLuz) matches = true;
+                        if (wantTerma != null && Boolean.TRUE.equals(h.getTerma()) && wantTerma) matches = true;
+                        if (wantWifi != null && Boolean.TRUE.equals(h.getWifi()) && wantWifi) matches = true;
+                        if (wantBanoPrivado != null && Boolean.TRUE.equals(h.getBanoPrivado()) && wantBanoPrivado) matches = true;
+                        if (!matches) return false;
+                    }
+                }
                 Object permitirMascotas = filters.get("permitir_mascotas"); if (permitirMascotas != null) { try { boolean pm = Boolean.parseBoolean(permitirMascotas.toString()); if (h.getPermitir_mascotas() == null || h.getPermitir_mascotas() != pm) return false; } catch (Exception ignored) {} }
                 Object estado = filters.get("estado"); if (estado != null) { String est = estado.toString().trim(); if (h.getEstado() == null || !h.getEstado().name().equalsIgnoreCase(est)) return false; }
                 // Nota: 'visible' y 'destacado' no se usan como filtros aquí (visible se aplica como exclusión implícita; destacado solo para ordenamiento)
@@ -230,25 +306,96 @@ public class SearchController {
         return true;
     }
 
-    private int textMatchScore(String q, Residencia r, edu.pe.residencias.model.entity.Habitacion h) {
-        if (q == null || q.isBlank()) return 0;
-        int score = 0; String ql = q.toLowerCase();
-        try { if (r != null && r.getNombre() != null && r.getNombre().toLowerCase().contains(ql)) score += 4; } catch (Exception ignored) {}
-        try { if (r != null && r.getDescripcion() != null && r.getDescripcion().toLowerCase().contains(ql)) score += 2; } catch (Exception ignored) {}
-        try { if (r != null && r.getServicios() != null && r.getServicios().toLowerCase().contains(ql)) score += 1; } catch (Exception ignored) {}
-        // location fields: direccion, distrito, provincia, departamento, pais
+    private int textMatchScore(String qNorm, Residencia r, edu.pe.residencias.model.entity.Habitacion h) {
+        if (qNorm == null || qNorm.isBlank()) return 0;
+        int score = 0;
         try {
-            if (r != null && r.getUbicacion() != null) {
-                var u = r.getUbicacion();
-                try { if (u.getDireccion() != null && u.getDireccion().toLowerCase().contains(ql)) score += 3; } catch (Exception ignored) {}
-                try { if (u.getDistrito() != null && u.getDistrito().toLowerCase().contains(ql)) score += 2; } catch (Exception ignored) {}
-                try { if (u.getProvincia() != null && u.getProvincia().toLowerCase().contains(ql)) score += 2; } catch (Exception ignored) {}
-                try { if (u.getDepartamento() != null && u.getDepartamento().toLowerCase().contains(ql)) score += 1; } catch (Exception ignored) {}
-                try { if (u.getPais() != null && u.getPais().toLowerCase().contains(ql)) score += 1; } catch (Exception ignored) {}
+            String[] terms = qNorm.split("\\s+");
+            for (String t : terms) {
+                if (t == null || t.isBlank()) continue;
+                String term = t.trim();
+                try {
+                    if (r != null) {
+                        if (r.getNombre() != null && normalize(r.getNombre()).contains(term)) { score += 2; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=nombre +2", String.valueOf(r == null ? null : r.getId()), term)); }
+                        if (r.getUbicacion() != null) {
+                            var u = r.getUbicacion();
+                            if (u.getDireccion() != null && normalize(u.getDireccion()).contains(term)) { score += 3; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=direccion +3", String.valueOf(r == null ? null : r.getId()), term)); }
+                            if (u.getDistrito() != null && normalize(u.getDistrito()).contains(term)) { score += 2; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=distrito +2", String.valueOf(r == null ? null : r.getId()), term)); }
+                            if (u.getProvincia() != null && normalize(u.getProvincia()).contains(term)) { score += 2; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=provincia +2", String.valueOf(r == null ? null : r.getId()), term)); }
+                            if (u.getDepartamento() != null && normalize(u.getDepartamento()).contains(term)) { score += 1; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=departamento +1", String.valueOf(r == null ? null : r.getId()), term)); }
+                            if (u.getPais() != null && normalize(u.getPais()).contains(term)) { score += 1; System.out.println(String.format("textMatchScore: residenciaId=%s term='%s' field=pais +1", String.valueOf(r == null ? null : r.getId()), term)); }
+                        }
+                    }
+                    if (h != null) {
+                        if (h.getNombre() != null && normalize(h.getNombre()).contains(term)) { score += 3; System.out.println(String.format("textMatchScore: habitacionId=%s term='%s' field=habitacion_nombre +3", String.valueOf(h == null ? null : h.getId()), term)); }
+                    }
+                } catch (Exception ignored) {}
             }
         } catch (Exception ignored) {}
-        try { if (h != null && h.getNombre() != null && h.getNombre().toLowerCase().contains(ql)) score += 3; } catch (Exception ignored) {}
-        try { if (h != null && h.getDescripcion() != null && h.getDescripcion().toLowerCase().contains(ql)) score += 1; } catch (Exception ignored) {}
+        try { System.out.println(String.format("textMatchScore total: residenciaId=%s habitacionId=%s q='%s' score=%d", String.valueOf(r == null ? null : r.getId()), String.valueOf(h == null ? null : h.getId()), qNorm, score)); } catch (Exception ignored) {}
         return score;
+    }
+
+    private int textMatchScoreHabitacion(String qNorm, edu.pe.residencias.model.entity.Habitacion h) {
+        if (qNorm == null || qNorm.isBlank() || h == null) return 0;
+        int score = 0;
+        try {
+            String[] terms = qNorm.split("\\s+");
+            for (String t : terms) {
+                if (t == null || t.isBlank()) continue;
+                String term = t.trim();
+                try {
+                    if (h.getNombre() != null && normalize(h.getNombre()).contains(term)) { score += 3; System.out.println(String.format("textMatchScoreHabitacion: habitacionId=%s term='%s' field=nombre +3", String.valueOf(h == null ? null : h.getId()), term)); }
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+        try { System.out.println(String.format("textMatchScoreHabitacion total: habitacionId=%s q='%s' score=%d", String.valueOf(h == null ? null : h.getId()), qNorm, score)); } catch (Exception ignored) {}
+        return score;
+    }
+
+    private String normalize(String s) {
+        if (s == null) return "";
+        String low = s.toLowerCase();
+        String norm = Normalizer.normalize(low, Normalizer.Form.NFD);
+        return norm.replaceAll("\\p{InCombiningDiacriticalMarks}+", "").trim();
+    }
+
+    private boolean residenciaHasService(String rServNormalized, String req) {
+        if (rServNormalized == null || req == null) return false;
+        String q = normalize(req);
+        // Split residencia services into tokens by common separators (keep multi-word tokens)
+        String[] parts = rServNormalized.split("[,;|/\\\\n]");
+        Set<String> tokens = new HashSet<>();
+        for (String p : parts) {
+            String t = p == null ? "" : p.trim();
+            if (!t.isEmpty()) tokens.add(t);
+        }
+
+        // horario/recepción/atención variants
+        if (q.contains("horario") || q.contains("recepcion") || q.contains("atencion")) {
+            for (String t : tokens) if (t.contains("horario") || t.contains("recepcion") || t.contains("atencion")) return true;
+            return false;
+        }
+
+        // synonyms mapping (including wifi)
+        List<String> syns;
+        if (q.contains("lav") || q.contains("lavad") || q.contains("lavander")) syns = Arrays.asList("lavadora", "lavanderia", "lavanderia", "lavado");
+        else if (q.contains("pens") || q.contains("pensi") || q.contains("comedor")) syns = Arrays.asList("pension", "pension", "comedor", "pensiones");
+        else if (q.contains("limp") || q.contains("limpieza")) syns = Arrays.asList("limpieza", "servicio de limpieza", "limpieza incluida");
+        else if (q.contains("park") || q.contains("estacion") || q.contains("parqueo")) syns = Arrays.asList("parking", "estacionamiento", "parqueo");
+        else if (q.contains("sala") || q.contains("estudio")) syns = Arrays.asList("sala de estudio", "sala estudio", "estudio");
+        else if (q.contains("seg") || q.contains("vigil") || q.contains("camar")) syns = Arrays.asList("seguridad", "vigilancia", "camaras", "guardia");
+        else if (q.contains("wifi") || q.contains("wi-fi")) syns = Arrays.asList("wifi", "wi fi", "conexion wifi");
+        else syns = Arrays.asList(q);
+
+        for (String s : syns) {
+            String sn = normalize(s);
+            for (String t : tokens) {
+                if (t.contains(sn) || sn.contains(t)) return true;
+            }
+        }
+        // fallback: contains check on whole string
+        for (String s : syns) if (rServNormalized.contains(normalize(s))) return true;
+        return false;
     }
 }

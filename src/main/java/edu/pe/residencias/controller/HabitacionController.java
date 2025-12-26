@@ -22,6 +22,7 @@ import edu.pe.residencias.service.HabitacionService;
 import edu.pe.residencias.repository.ResidenciaRepository;
 import edu.pe.residencias.repository.ImagenHabitacionRepository;
 import edu.pe.residencias.model.dto.HabitacionFullDTO;
+import edu.pe.residencias.model.dto.HabitacionPreviewDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import edu.pe.residencias.model.dto.ImagenesUpdateRequest;
 
@@ -197,6 +198,59 @@ public class HabitacionController {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    @GetMapping("/preview/{id}")
+    public ResponseEntity<?> getHabitacionPreview(@PathVariable("id") Long id, HttpServletRequest request) {
+        try {
+            Optional<Habitacion> opt = habitacionService.read(id);
+            if (opt.isEmpty()) return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            Habitacion h = opt.get();
+
+            HabitacionPreviewDTO dto = new HabitacionPreviewDTO();
+            dto.setId(h.getId());
+            dto.setNombre(h.getNombre());
+            dto.setPrecio(h.getPrecioMensual());
+            dto.setEstado(h.getEstado() == null ? null : h.getEstado().name());
+            dto.setPiso(h.getPiso());
+            dto.setCapacidad(h.getCapacidad());
+            // residencia destacado flag
+            dto.setDestacado(h.getResidencia() != null && Boolean.TRUE.equals(h.getResidencia().getDestacado()));
+
+            // main image (first by orden)
+            java.util.List<edu.pe.residencias.model.entity.ImagenHabitacion> imgs = imagenHabitacionRepository.findByHabitacionId(h.getId());
+            if (imgs != null && !imgs.isEmpty()) {
+                imgs.sort((a,b) -> {
+                    int oa = a == null || a.getOrden() == null ? Integer.MAX_VALUE : a.getOrden();
+                    int ob = b == null || b.getOrden() == null ? Integer.MAX_VALUE : b.getOrden();
+                    return Integer.compare(oa, ob);
+                });
+                dto.setImagen_principal(imgs.get(0) != null ? imgs.get(0).getUrl() : null);
+            } else dto.setImagen_principal(null);
+
+            // favorito según token (opcional)
+            try {
+                String auth = request.getHeader("Authorization");
+                if (auth != null && auth.startsWith("Bearer ")) {
+                    String token = auth.substring("Bearer ".length()).trim();
+                    var claims = jwtUtil.parseToken(token);
+                    String uid = claims.get("uid", String.class);
+                    if (uid != null) {
+                        var uopt = usuarioRepository.findByUuid(uid);
+                        if (uopt.isPresent()) {
+                            boolean fav = favoritoService.isLiked(uopt.get().getId(), h.getId());
+                            dto.setFavorito(fav);
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            return ResponseEntity.ok(dto);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Habitacion> delHabitacion(@PathVariable("id") Long id) {
