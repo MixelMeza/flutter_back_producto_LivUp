@@ -43,7 +43,11 @@ public class SearchController {
             BigDecimal lat = null, lng = null, radioKm = null;
             try { if (body.get("lat") != null) lat = toBigDecimal(body.get("lat")); } catch (Exception ignored) {}
             try { if (body.get("lng") != null) lng = toBigDecimal(body.get("lng")); } catch (Exception ignored) {}
-            try { if (body.get("radioKm") != null) radioKm = toBigDecimal(body.get("radioKm")); } catch (Exception ignored) {}
+            try {
+                if (body.get("radioKm") != null) radioKm = toBigDecimal(body.get("radioKm"));
+                // tolerate alternate client key
+                if (radioKm == null && body.get("radiusKm") != null) radioKm = toBigDecimal(body.get("radiusKm"));
+            } catch (Exception ignored) {}
 
             @SuppressWarnings("unchecked")
             Map<String,Object> residenciaFilters = body.get("residenciaFilters") == null ? Collections.emptyMap() : (Map<String,Object>) body.get("residenciaFilters");
@@ -51,10 +55,10 @@ public class SearchController {
             Map<String,Object> habitacionFilters = body.get("habitacionFilters") == null ? Collections.emptyMap() : (Map<String,Object>) body.get("habitacionFilters");
 
             Double precioMin = null, precioMax = null;
-            try { if (habitacionFilters.get("precioMin") != null) precioMin = ((Number)habitacionFilters.get("precioMin")).doubleValue(); } catch (Exception ignored) {}
-            try { if (habitacionFilters.get("precioMax") != null) precioMax = ((Number)habitacionFilters.get("precioMax")).doubleValue(); } catch (Exception ignored) {}
-            if (precioMin == null) { try { if (body.get("precioMin") != null) precioMin = ((Number)body.get("precioMin")).doubleValue(); } catch (Exception ignored) {} }
-            if (precioMax == null) { try { if (body.get("precioMax") != null) precioMax = ((Number)body.get("precioMax")).doubleValue(); } catch (Exception ignored) {} }
+            try { if (habitacionFilters.get("precioMin") != null) { BigDecimal bd = toBigDecimal(habitacionFilters.get("precioMin")); if (bd != null) precioMin = bd.doubleValue(); } } catch (Exception ignored) {}
+            try { if (habitacionFilters.get("precioMax") != null) { BigDecimal bd = toBigDecimal(habitacionFilters.get("precioMax")); if (bd != null) precioMax = bd.doubleValue(); } } catch (Exception ignored) {}
+            if (precioMin == null) { try { if (body.get("precioMin") != null) { BigDecimal bd = toBigDecimal(body.get("precioMin")); if (bd != null) precioMin = bd.doubleValue(); } } catch (Exception ignored) {} }
+            if (precioMax == null) { try { if (body.get("precioMax") != null) { BigDecimal bd = toBigDecimal(body.get("precioMax")); if (bd != null) precioMax = bd.doubleValue(); } } catch (Exception ignored) {} }
 
             // radius filter
             List<Residencia> allResidencias = residenciaRepository.findAll();
@@ -114,6 +118,14 @@ public class SearchController {
                     if (hs == null) hs = Collections.emptyList();
                     long likesSum = 0L; long vistasSum = 0L; int textScore = 0; boolean anyDestacado = (r != null && Boolean.TRUE.equals(r.getDestacado())); java.time.LocalDateTime latestCreated = null;
 
+                    // If client provided habitacionFilters (or price constraints), require at least one matching room
+                    boolean requireRoomMatch = false;
+                    try {
+                        requireRoomMatch = (body != null && body.get("habitacionFilters") != null && habitacionFilters != null && !habitacionFilters.isEmpty())
+                                || (precioMin != null) || (precioMax != null);
+                    } catch (Exception ignored) {}
+                    int matchedRooms = 0;
+
                     // Match residencia itself first so residencias without habitaciones can match
                     if (qNorm != null && !qNorm.isEmpty()) {
                         textScore = textMatchScore(qNorm, r, null);
@@ -122,6 +134,9 @@ public class SearchController {
                     for (var h : hs) {
                         if (h == null) continue;
                         try {
+                            // Apply habitacion filters when searching RESIDENCIA too
+                            if (!applyHabitacionFilters(h, habitacionFilters, precioMin, precioMax)) continue;
+                            matchedRooms++;
                             likesSum += favoritoService.countLikes(h.getId());
                             try { vistasSum += vistaRecienteRepository.countByHabitacionId(h.getId()); } catch (Exception ignored) {}
                             // do NOT propagate habitacion.destacado to residencia (Option A)
@@ -129,6 +144,7 @@ public class SearchController {
                             if (qNorm != null && !qNorm.isEmpty()) textScore += textMatchScoreHabitacion(qNorm, h);
                         } catch (Exception ignored) {}
                     }
+                    if (requireRoomMatch && matchedRooms == 0) continue;
                     if (qNorm != null && !qNorm.isEmpty() && textScore == 0) continue;
                     Map<String,Object> m = new HashMap<>();
                     m.put("residenciaId", r.getId());
@@ -198,6 +214,16 @@ public class SearchController {
         }
     }
 
+    private Integer toInteger(Object v) {
+        BigDecimal bd = toBigDecimal(v);
+        if (bd == null) return null;
+        try {
+            return bd.intValue();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private boolean applyResidenciaFilters(Residencia r, Map<String,Object> filters) {
         if (r == null) return false;
         // Exclude residencias con estado ELIMINADO/OCULTO
@@ -249,8 +275,19 @@ public class SearchController {
         } catch (Exception ignored) {}
             if (filters != null && !filters.isEmpty()) {
             try {
-                Object capacidad = filters.get("capacidad"); if (capacidad != null) { try { int c = ((Number)capacidad).intValue(); if (h.getCapacidad() == null || h.getCapacidad() < c) return false; } catch (Exception ignored) {} }
-                Object piso = filters.get("piso"); if (piso != null) { try { int p = ((Number)piso).intValue(); if (h.getPiso() == null || h.getPiso() != p) return false; } catch (Exception ignored) {} }
+                Object capacidad = filters.get("capacidad");
+                if (capacidad != null) {
+                    Integer c = toInteger(capacidad);
+                    if (c == null) return false; // invalid filter value provided
+                    if (h.getCapacidad() == null || h.getCapacidad() < c) return false;
+                }
+
+                Object piso = filters.get("piso");
+                if (piso != null) {
+                    Integer p = toInteger(piso);
+                    if (p == null) return false; // invalid filter value provided
+                    if (h.getPiso() == null || !h.getPiso().equals(p)) return false;
+                }
                 Object amueblado = filters.get("amueblado"); if (amueblado != null) { try { boolean a = Boolean.parseBoolean(amueblado.toString()); if (h.getAmueblado() == null || h.getAmueblado() != a) return false; } catch (Exception ignored) {} }
 
                 // Diferenciar filtros según filtro 'departamento' enviado por el cliente.
@@ -261,6 +298,20 @@ public class SearchController {
                 Object tipoDepartamentoFilter = filters.get("departamento");
                 Boolean tipoDep = null;
                 try { if (tipoDepartamentoFilter != null) tipoDep = Boolean.parseBoolean(tipoDepartamentoFilter.toString()); } catch (Exception ignored) {}
+
+                // tolerate habitacionFilters.tipo = "CUARTO" | "DEPARTAMENTO"
+                if (tipoDep == null) {
+                    try {
+                        Object tipo = filters.get("tipo");
+                        if (tipo != null) {
+                            String ts = tipo.toString().trim();
+                            if (!ts.isBlank()) {
+                                if ("DEPARTAMENTO".equalsIgnoreCase(ts)) tipoDep = true;
+                                else if ("CUARTO".equalsIgnoreCase(ts) || "HABITACION".equalsIgnoreCase(ts)) tipoDep = false;
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
 
                 // gather service filters (if present)
                 Boolean wantAgua = null; Boolean wantLuz = null; Boolean wantTerma = null; Boolean wantWifi = null; Boolean wantBanoPrivado = null;
@@ -285,19 +336,27 @@ public class SearchController {
                         if (wantBanoPrivado != null) { if (h.getBanoPrivado() == null || h.getBanoPrivado() != wantBanoPrivado) return false; }
                     }
                 } else {
-                    // tipo not specified: if any service filters provided, accept rooms matching ANY of them (OR across services)
+                    // tipo not specified: apply relevant service filters per room type
+                    // - departamentos: agua/luz/terma
+                    // - cuartos: wifi/banoPrivado
                     boolean anyServiceFilterProvided = (wantAgua != null) || (wantLuz != null) || (wantTerma != null) || (wantWifi != null) || (wantBanoPrivado != null);
                     if (anyServiceFilterProvided) {
-                        boolean matches = false;
-                        if (wantAgua != null && Boolean.TRUE.equals(h.getAgua()) && wantAgua) matches = true;
-                        if (wantLuz != null && Boolean.TRUE.equals(h.getLuz()) && wantLuz) matches = true;
-                        if (wantTerma != null && Boolean.TRUE.equals(h.getTerma()) && wantTerma) matches = true;
-                        if (wantWifi != null && Boolean.TRUE.equals(h.getWifi()) && wantWifi) matches = true;
-                        if (wantBanoPrivado != null && Boolean.TRUE.equals(h.getBanoPrivado()) && wantBanoPrivado) matches = true;
-                        if (!matches) return false;
+                        boolean isDepartamento = Boolean.TRUE.equals(h.getDepartamento());
+                        if (isDepartamento) {
+                            if (wantAgua != null) { if (h.getAgua() == null || h.getAgua() != wantAgua) return false; }
+                            if (wantLuz != null) { if (h.getLuz() == null || h.getLuz() != wantLuz) return false; }
+                            if (wantTerma != null) { if (h.getTerma() == null || h.getTerma() != wantTerma) return false; }
+                            // ignore cuarto-only filters
+                        } else {
+                            if (wantWifi != null) { if (h.getWifi() == null || h.getWifi() != wantWifi) return false; }
+                            if (wantBanoPrivado != null) { if (h.getBanoPrivado() == null || h.getBanoPrivado() != wantBanoPrivado) return false; }
+                            // ignore departamento-only filters
+                        }
                     }
                 }
-                Object permitirMascotas = filters.get("permitir_mascotas"); if (permitirMascotas != null) { try { boolean pm = Boolean.parseBoolean(permitirMascotas.toString()); if (h.getPermitir_mascotas() == null || h.getPermitir_mascotas() != pm) return false; } catch (Exception ignored) {} }
+                Object permitirMascotas = filters.get("permitir_mascotas");
+                if (permitirMascotas == null) permitirMascotas = filters.get("permitirMascotas");
+                if (permitirMascotas != null) { try { boolean pm = Boolean.parseBoolean(permitirMascotas.toString()); if (h.getPermitir_mascotas() == null || h.getPermitir_mascotas() != pm) return false; } catch (Exception ignored) {} }
                 Object estado = filters.get("estado"); if (estado != null) { String est = estado.toString().trim(); if (h.getEstado() == null || !h.getEstado().name().equalsIgnoreCase(est)) return false; }
                 // Nota: 'visible' y 'destacado' no se usan como filtros aquí (visible se aplica como exclusión implícita; destacado solo para ordenamiento)
             } catch (Exception ignored) {}
