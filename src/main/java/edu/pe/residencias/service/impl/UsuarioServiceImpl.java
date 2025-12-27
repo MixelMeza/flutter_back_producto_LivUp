@@ -23,6 +23,7 @@ import edu.pe.residencias.model.dto.UserProfileDTO;
 import edu.pe.residencias.repository.AbonoRepository;
 import edu.pe.residencias.repository.ContratoRepository;
 import edu.pe.residencias.repository.AccesoRepository;
+import edu.pe.residencias.exception.DuplicateRegistrationException;
 
 @Service
 public class UsuarioServiceImpl implements UsuarioService {
@@ -60,6 +61,45 @@ public class UsuarioServiceImpl implements UsuarioService {
     @org.springframework.beans.factory.annotation.Value("${app.frontend.url:https://flutter-back-producto-livup-1.onrender.com}")
     private String frontendBaseUrl;
 
+    private String buildVerificationEmailHtml(String verifyLink, String username) {
+        String primary = "#0066CC";
+        String bg = "#f6f9fc";
+        String textColor = "#0f2740";
+
+        String safeUser = username == null ? "" : username;
+
+        return "<!doctype html>"
+                + "<html lang=\"es\">"
+                + "<head>"
+                + "<meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>Verifica tu correo</title>"
+                + "<style>"
+                + "body{margin:0;padding:0;background:" + bg + ";font-family:Inter,Roboto,Arial,sans-serif;color:" + textColor + ";-webkit-font-smoothing:antialiased;}"
+                + ".container{width:100%;max-width:680px;margin:0 auto;padding:20px;}"
+                + ".card{background:#ffffff;border-radius:12px;padding:28px;box-shadow:0 8px 24px rgba(2,30,66,0.06);}"
+                + "h1{font-size:20px;margin:0 0 12px;color:" + textColor + ";}"
+                + "p{margin:0 0 16px;color:#395067;line-height:1.5;}"
+                + ".btn{display:inline-block;padding:12px 20px;background:" + primary + ";color:#ffffff;border-radius:8px;text-decoration:none;font-weight:600;}"
+                + ".muted{color:#7b8b98;font-size:13px;margin-top:18px;}"
+                + "@media (max-width:480px){.card{padding:18px}.btn{width:100%;display:block;text-align:center}}"
+                + "</style>"
+                + "</head>"
+                + "<body>"
+                + "<div class=\"container\">"
+                + "  <div class=\"card\">"
+                + "    <h1>Verifica tu correo electrónico</h1>"
+                + "    <p>Hola " + safeUser + ", gracias por registrarte en LivUp. Para activar tu cuenta pulsa el botón de abajo:</p>"
+                + "    <p style=\"text-align:center;margin:20px 0\">"
+                + "      <a class=\"btn\" href=\"" + verifyLink + "\" target=\"_blank\" rel=\"noopener\">Verificar mi correo</a>"
+                + "    </p>"
+                + "    <p class=\"muted\">Si no solicitaste esta verificación, puedes ignorar este correo.</p>"
+                + "  </div>"
+                + "  <p style=\"text-align:center;color:#9aa7b8;font-size:12px;margin-top:12px\">LivUp &copy; " + java.time.Year.now().getValue() + "</p>"
+                + "</div>"
+                + "</body></html>";
+    }
+
     
     @Override
     public Usuario create(Usuario usuario) {
@@ -69,11 +109,34 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     @Transactional
     public Usuario createFromDTO(UsuarioCreateDTO dto) {
+        // Normalize/validate unique fields first so we can return a clear reason
+        String username = dto.getUsername() == null ? null : dto.getUsername().trim();
+        if (username == null || username.isBlank()) {
+            throw new IllegalArgumentException("El nombre de usuario es requerido");
+        }
+
+        String emailNorm = dto.getEmail() == null ? null : dto.getEmail().trim().toLowerCase();
+        String telefono = dto.getTelefono() == null ? null : dto.getTelefono().trim();
+        String dni = dto.getDni() == null ? null : dto.getDni().trim();
+
+        if (repository.findByUsername(username).isPresent()) {
+            throw new DuplicateRegistrationException("USERNAME_EXISTS", "Ya existe un usuario con ese nombre de usuario");
+        }
+        if (emailNorm != null && !emailNorm.isBlank() && personaRepository.findByEmail(emailNorm).isPresent()) {
+            throw new DuplicateRegistrationException("EMAIL_EXISTS", "Ya existe un usuario con ese email");
+        }
+        if (telefono != null && !telefono.isBlank() && personaRepository.findByTelefono(telefono).isPresent()) {
+            throw new DuplicateRegistrationException("PHONE_EXISTS", "Ya existe un usuario con ese teléfono");
+        }
+        if (dni != null && !dni.isBlank() && personaRepository.findByDni(dni).isPresent()) {
+            throw new DuplicateRegistrationException("DNI_EXISTS", "Ya existe un usuario con ese DNI");
+        }
+
         Persona p = new Persona();
         p.setNombre(dto.getNombre());
         p.setApellido(dto.getApellido());
         p.setTipoDocumento(dto.getTipo_documento());
-        p.setDni(dto.getDni());
+        p.setDni(dni);
         if (dto.getFecha_nacimiento() != null && !dto.getFecha_nacimiento().isEmpty()) {
             // Accept several incoming formats: plain date "yyyy-MM-dd" or date-time like
             // "yyyy-MM-ddTHH:mm:ss(.SSS)"
@@ -97,8 +160,8 @@ public class UsuarioServiceImpl implements UsuarioService {
                 }
             }
         }
-        p.setTelefono(dto.getTelefono());
-        p.setEmail(dto.getEmail());
+        p.setTelefono(telefono);
+        p.setEmail(emailNorm);
         p.setDireccion(dto.getDireccion());
         p.setNotas(dto.getNotas());
         p.setSexo(dto.getSexo());
@@ -108,7 +171,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         Usuario u = new Usuario();
         u.setPersona(p);
-        u.setUsername(dto.getUsername());
+        u.setUsername(username);
         // Ensure emailVerificado has a sensible default (false) when not provided by
         // the client
         if (dto.getEmail_verificado() == null) {
@@ -155,13 +218,16 @@ public class UsuarioServiceImpl implements UsuarioService {
                 String email = saved.getPersona() != null ? saved.getPersona().getEmail() : null;
                 if (email != null && !email.isBlank()) {
                     String subject = "Verifica tu correo en LivUp";
-                    // Include username and provided password in the verification email (useful for onboarding/testing).
-                    // WARNING: sending raw passwords via email is not recommended in production. Proceed only if acceptable.
+                    // HTML version: do not display the raw URL in the email body (only in the button href)
+                    String html = buildVerificationEmailHtml(verifyLink, dto.getUsername());
+
+                    // Plain-text fallback: includes the link so users can still verify if HTML is blocked
                     String providedPassword = dto.getPassword();
-                    String body = "Bienvenido a LivUp!\n\nPara verificar tu correo haz clic en el siguiente enlace:\n"
+                    String plainText = "Bienvenido a LivUp!\n\nPara verificar tu correo, abre este enlace:\n"
                         + verifyLink + "\n\nCredenciales:\n  usuario: " + dto.getUsername() + "\n  contraseña: " + (providedPassword == null ? "" : providedPassword)
                         + "\n\nSi no fuiste tú, ignora este correo.";
-                    emailService.sendSimpleMessage(email, subject, body);
+
+                    emailService.sendHtmlMessage(email, subject, html, plainText);
                 } else {
                     System.out.println("[UsuarioService] No email present for user id=" + saved.getId());
                 }

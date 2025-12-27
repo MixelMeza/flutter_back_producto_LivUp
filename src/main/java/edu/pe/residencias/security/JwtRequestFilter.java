@@ -37,6 +37,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             || "/api/auth/verify".equals(path)
             || "/api/auth/send-verification-by-token".equals(path)
             || "/api/auth/resend-verification-by-email".equals(path)
+            // Public registration endpoint used by the mobile app
+            || ("/api/usuarios".equals(path) && "POST".equalsIgnoreCase(request.getMethod()))
             || "/api/public/keepalive".equals(path)
             || "/api/public/app-status".equals(path)
             || "/api/search".equals(path)

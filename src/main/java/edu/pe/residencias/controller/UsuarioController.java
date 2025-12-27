@@ -29,6 +29,7 @@ import edu.pe.residencias.controller.auth.ErrorResponse;
 import io.jsonwebtoken.Claims;
 import org.springframework.web.bind.annotation.RequestHeader;
 import edu.pe.residencias.model.dto.PersonaUpdateDTO;
+import edu.pe.residencias.exception.DuplicateRegistrationException;
 
 @RestController
 @RequestMapping("/api/usuarios")
@@ -62,7 +63,7 @@ public class UsuarioController {
     }
 
     @PostMapping
-    public ResponseEntity<Usuario> crear(@Valid @RequestBody UsuarioCreateDTO usuarioDto) {
+    public ResponseEntity<?> crear(@Valid @RequestBody UsuarioCreateDTO usuarioDto) {
         try {
             // Log incoming registration data (mask password length)
             String pwd = usuarioDto.getPassword() == null ? "" : usuarioDto.getPassword();
@@ -72,6 +73,8 @@ public class UsuarioController {
             Usuario u = usuarioService.createFromDTO(usuarioDto);
             System.out.println("[UsuarioController] Registro success - usuarioId=" + (u.getId() == null ? "null" : u.getId()) + ", uuid=" + u.getUuid());
             return new ResponseEntity<>(u, HttpStatus.CREATED);
+        } catch (DuplicateRegistrationException dup) {
+            return new ResponseEntity<>(new ErrorResponse(dup.getMessage()), HttpStatus.CONFLICT);
         } catch (Exception e) {
             // Print stacktrace to console so you can see the error cause
             System.err.println("[UsuarioController] Registro failed: " + e.getMessage());

@@ -20,11 +20,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+
 import edu.pe.residencias.model.entity.Acceso;
 import edu.pe.residencias.model.entity.Usuario;
 import edu.pe.residencias.repository.AccesoRepository;
 import edu.pe.residencias.security.JwtUtil;
 import edu.pe.residencias.service.UsuarioService;
+import edu.pe.residencias.model.dto.UsuarioCreateDTO;
+import edu.pe.residencias.exception.DuplicateRegistrationException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -59,6 +63,23 @@ public class AuthController {
 
     @Autowired
     private edu.pe.residencias.repository.InvalidatedTokenRepository invalidatedTokenRepository;
+
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody UsuarioCreateDTO usuarioDto) {
+        try {
+            Usuario u = usuarioService.createFromDTO(usuarioDto);
+            return new ResponseEntity<>(u, HttpStatus.CREATED);
+        } catch (DuplicateRegistrationException dup) {
+            return new ResponseEntity<>(new ErrorResponse(dup.getMessage()), HttpStatus.CONFLICT);
+        } catch (org.springframework.dao.DataIntegrityViolationException dex) {
+            // likely unique constraint violation (username/email/dni)
+            String msg = dex.getMostSpecificCause() != null ? dex.getMostSpecificCause().getMessage() : dex.getMessage();
+            return new ResponseEntity<>(new ErrorResponse("Data integrity error: " + msg), HttpStatus.CONFLICT);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ResponseEntity<>(new ErrorResponse("Error al registrar usuario"), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequest req, HttpServletRequest request) {
