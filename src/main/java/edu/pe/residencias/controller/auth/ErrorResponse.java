@@ -8,5 +8,11 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ErrorResponse {
+    private String reason;
     private String message;
+
+    public ErrorResponse(String message) {
+        this.reason = null;
+        this.message = message;
+    }
 }

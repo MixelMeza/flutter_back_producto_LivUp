@@ -70,7 +70,7 @@ public class AuthController {
             Usuario u = usuarioService.createFromDTO(usuarioDto);
             return new ResponseEntity<>(u, HttpStatus.CREATED);
         } catch (DuplicateRegistrationException dup) {
-            return new ResponseEntity<>(new ErrorResponse(dup.getMessage()), HttpStatus.CONFLICT);
+            return new ResponseEntity<>(new ErrorResponse(dup.getReason(), dup.getMessage()), HttpStatus.CONFLICT);
         } catch (org.springframework.dao.DataIntegrityViolationException dex) {
             // likely unique constraint violation (username/email/dni)
             String msg = dex.getMostSpecificCause() != null ? dex.getMostSpecificCause().getMessage() : dex.getMessage();

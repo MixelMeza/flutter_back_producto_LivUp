@@ -74,7 +74,7 @@ public class UsuarioController {
             System.out.println("[UsuarioController] Registro success - usuarioId=" + (u.getId() == null ? "null" : u.getId()) + ", uuid=" + u.getUuid());
             return new ResponseEntity<>(u, HttpStatus.CREATED);
         } catch (DuplicateRegistrationException dup) {
-            return new ResponseEntity<>(new ErrorResponse(dup.getMessage()), HttpStatus.CONFLICT);
+            return new ResponseEntity<>(new ErrorResponse(dup.getReason(), dup.getMessage()), HttpStatus.CONFLICT);
         } catch (Exception e) {
             // Print stacktrace to console so you can see the error cause
             System.err.println("[UsuarioController] Registro failed: " + e.getMessage());
