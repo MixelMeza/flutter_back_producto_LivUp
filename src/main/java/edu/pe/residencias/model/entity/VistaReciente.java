@@ -41,6 +41,9 @@ public class VistaReciente {
     @JoinColumn(name = "habitacion_id", nullable = false)
     private Habitacion habitacion;
 
+    @Column(name = "view_count", nullable = false)
+    private Integer count = 1;
+
     @Column(name = "visto_en", nullable = false)
     private Instant vistoEn = Instant.now();
 }

@@ -291,6 +291,7 @@ public class ResidenciaController {
             dto.setId(r.getId());
             dto.setNombre(r.getNombre());
             dto.setTipo(r.getTipo());
+            dto.setDestacado(r.getDestacado());
             dto.setCantidadHabitaciones(r.getCantidadHabitaciones());
             dto.setDescripcion(r.getDescripcion());
             dto.setTelefonoContacto(r.getTelefonoContacto());
@@ -414,6 +415,7 @@ public class ResidenciaController {
                 s.setId(r.getId());
                 s.setNombre(r.getNombre());
                 s.setTipo(r.getTipo());
+                s.setDestacado(r.getDestacado());
                 s.setEstado(r.getEstado());
 
                 var u = r.getUbicacion();
@@ -497,6 +499,7 @@ public class ResidenciaController {
                 dto.setId(r.getId());
                 dto.setNombre(r.getNombre());
                 dto.setTipo(r.getTipo());
+                dto.setDestacado(r.getDestacado());
                 dto.setCantidadHabitaciones(r.getCantidadHabitaciones());
                 dto.setDescripcion(r.getDescripcion());
                 dto.setTelefonoContacto(r.getTelefonoContacto());

@@ -17,6 +17,8 @@ public class VistaRecienteController {
     // POST para usuario autenticado
     @PostMapping
     public void recordViewForUser(@RequestBody VistaReciente body) {
+        if (body == null || body.getUsuario() == null || body.getHabitacion() == null) return;
+        if (body.getUsuario().getId() == null || body.getHabitacion().getId() == null) return;
         vistaRecienteService.recordViewForUser(body.getUsuario().getId(), body.getHabitacion().getId());
     }
 

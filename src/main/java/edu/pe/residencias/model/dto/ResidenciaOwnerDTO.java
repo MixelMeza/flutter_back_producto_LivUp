@@ -14,6 +14,7 @@ public class ResidenciaOwnerDTO {
     private Long id;
     private String nombre;
     private String tipo;
+    private Boolean destacado;
     private Integer cantidadHabitaciones;
     private String descripcion;
     private String telefonoContacto;

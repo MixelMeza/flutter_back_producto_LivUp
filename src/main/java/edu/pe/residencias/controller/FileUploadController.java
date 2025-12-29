@@ -2,6 +2,7 @@ package edu.pe.residencias.controller;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import edu.pe.residencias.model.entity.ImagenHabitacion;
 import edu.pe.residencias.model.entity.ImagenResidencia;
@@ -260,21 +263,40 @@ public class FileUploadController {
     // Upload residencia reglamento (pdf/raw) and update residencia.reglamentoUrl
     @PostMapping("/residencia/{residenciaId}/reglamento")
     public ResponseEntity<?> uploadResidenciaReglamento(@PathVariable Long residenciaId,
+                                                         @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                         HttpServletRequest request,
                                                          @RequestParam("file") MultipartFile file,
                                                          @RequestParam(value = "folder", defaultValue = "reglamentos") String folder) {
         try {
             var residenciaOpt = residenciaRepository.findById(residenciaId);
             if (residenciaOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Residencia no encontrada");
-            Map result = cloudinaryService.uploadRaw(file, folder);
-            String url = (String) result.get("secure_url");
-            String publicId = (String) result.get("public_id");
-
             Residencia r = residenciaOpt.get();
+
+            // Enforce ownership: only the residencia admin user can update reglamento
+            Optional<String> uidOpt = getUidFromRequestOrHeader(request, authHeader);
+            if (uidOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("No token provided");
+            var usuarioOpt = usuarioRepository.findByUuid(uidOpt.get());
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            if (r.getUsuario() == null || r.getUsuario().getId() == null || !r.getUsuario().getId().equals(usuarioOpt.get().getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("No autorizado para modificar esta residencia");
+            }
+
+            String contentType = null;
+            try { contentType = file == null ? null : file.getContentType(); } catch (Exception ignore) {}
+
+            // If it's an image, upload as image so it can be previewed easily. Otherwise upload as raw.
+            String resourceType = (contentType != null && contentType.toLowerCase().startsWith("image/")) ? "image" : "raw";
+            Map result = "image".equals(resourceType)
+                    ? cloudinaryService.uploadImage(file, folder)
+                    : cloudinaryService.uploadRaw(file, folder);
+            String url = (String) result.get("secure_url");
+
             r.setReglamentoUrl(url);
             residenciaRepository.save(r);
 
             Map<String, Object> resp = new HashMap<>();
             resp.put("url", url);
+            resp.put("resourceType", resourceType);
             resp.put("result", result);
             return ResponseEntity.ok(resp);
         } catch (Exception e) {
@@ -339,14 +361,26 @@ public class FileUploadController {
 
     // Delete residencia reglamento (pdf/raw)
     @DeleteMapping("/residencia/{residenciaId}/reglamento")
-    public ResponseEntity<?> deleteResidenciaReglamento(@PathVariable Long residenciaId) {
+    public ResponseEntity<?> deleteResidenciaReglamento(@PathVariable Long residenciaId,
+                                                        @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                        HttpServletRequest request) {
         try {
             var residenciaOpt = residenciaRepository.findById(residenciaId);
             if (residenciaOpt.isEmpty()) return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Residencia no encontrada");
             var r = residenciaOpt.get();
+
+            // Enforce ownership
+            Optional<String> uidOpt = getUidFromRequestOrHeader(request, authHeader);
+            if (uidOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("No token provided");
+            var usuarioOpt = usuarioRepository.findByUuid(uidOpt.get());
+            if (usuarioOpt.isEmpty()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Usuario no encontrado");
+            if (r.getUsuario() == null || r.getUsuario().getId() == null || !r.getUsuario().getId().equals(usuarioOpt.get().getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("No autorizado para modificar esta residencia");
+            }
+
             String publicId = extractPublicIdFromUrl(r.getReglamentoUrl());
             if (publicId != null && !publicId.isBlank()) {
-                cloudinaryService.destroy(publicId, "raw");
+                cloudinaryService.destroy(publicId, cloudinaryResourceTypeFromUrl(r.getReglamentoUrl()));
             }
             r.setReglamentoUrl(null);
             residenciaRepository.save(r);
@@ -354,6 +388,36 @@ public class FileUploadController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Delete failed: " + e.getMessage());
         }
+    }
+
+    private Optional<String> getUidFromRequestOrHeader(HttpServletRequest request, String authHeader) {
+        try {
+            Object claimsObj = request == null ? null : request.getAttribute("jwtClaims");
+            if (claimsObj instanceof io.jsonwebtoken.Claims) {
+                io.jsonwebtoken.Claims claims = (io.jsonwebtoken.Claims) claimsObj;
+                String uuid = claims.get("uid", String.class);
+                if (uuid != null && !uuid.isBlank()) return Optional.of(uuid);
+            }
+        } catch (Exception ignore) {}
+
+        try {
+            if (authHeader == null || authHeader.isBlank()) return Optional.empty();
+            String token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            io.jsonwebtoken.Claims claims = jwtUtil.parseToken(token);
+            String uuid = claims.get("uid", String.class);
+            if (uuid == null || uuid.isBlank()) return Optional.empty();
+            return Optional.of(uuid);
+        } catch (Exception ignore) {
+            return Optional.empty();
+        }
+    }
+
+    private String cloudinaryResourceTypeFromUrl(String secureUrl) {
+        if (secureUrl == null) return "raw";
+        String u = secureUrl.toLowerCase();
+        if (u.contains("/image/upload/")) return "image";
+        if (u.contains("/raw/upload/")) return "raw";
+        return "raw";
     }
 
     // Extract Cloudinary public_id from a secure_url (best-effort). Returns null if can't parse.

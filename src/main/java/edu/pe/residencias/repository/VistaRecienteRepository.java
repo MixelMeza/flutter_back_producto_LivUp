@@ -26,5 +26,6 @@ public interface VistaRecienteRepository extends JpaRepository<VistaReciente, Lo
     void deleteByUsuarioIdAndHabitacionId(Long usuarioId, Long habitacionId);
 
     // Count total distinct views for a habitacion (both session and user entries counted)
-    long countByHabitacionId(Long habitacionId);
+    @Query("SELECT COALESCE(SUM(v.count), 0) FROM VistaReciente v WHERE v.habitacion.id = :habitacionId")
+    long countByHabitacionId(@Param("habitacionId") Long habitacionId);
 }

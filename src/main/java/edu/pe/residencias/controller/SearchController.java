@@ -60,6 +60,18 @@ public class SearchController {
             if (precioMin == null) { try { if (body.get("precioMin") != null) { BigDecimal bd = toBigDecimal(body.get("precioMin")); if (bd != null) precioMin = bd.doubleValue(); } } catch (Exception ignored) {} }
             if (precioMax == null) { try { if (body.get("precioMax") != null) { BigDecimal bd = toBigDecimal(body.get("precioMax")); if (bd != null) precioMax = bd.doubleValue(); } } catch (Exception ignored) {} }
 
+            // Only apply a default max limit when the request is effectively "unfiltered" (only tipoBusqueda).
+            // If the client provides any q/filters/radius/price constraints, return everything.
+            boolean isUnfiltered = false;
+            try {
+                boolean qEmpty = (qNorm == null || qNorm.isBlank());
+                boolean noResidenciaFilters = (residenciaFilters == null || residenciaFilters.isEmpty());
+                boolean noHabitacionFilters = (habitacionFilters == null || habitacionFilters.isEmpty());
+                boolean noGeo = (lat == null && lng == null && radioKm == null);
+                boolean noPrice = (precioMin == null && precioMax == null);
+                isUnfiltered = qEmpty && noResidenciaFilters && noHabitacionFilters && noGeo && noPrice;
+            } catch (Exception ignored) {}
+
             // radius filter
             List<Residencia> allResidencias = residenciaRepository.findAll();
             List<Residencia> candidateResidencias = new ArrayList<>();
@@ -110,6 +122,7 @@ public class SearchController {
                     }
                 }
                 results.sort(this::compareResults);
+                if (isUnfiltered) results = limitResults(results, 100);
                 return new ResponseEntity<>(results, HttpStatus.OK);
             } else {
                 List<Map<String,Object>> results = new ArrayList<>();
@@ -155,12 +168,20 @@ public class SearchController {
                     results.add(m);
                 }
                 results.sort(this::compareResults);
+                if (isUnfiltered) results = limitResults(results, 100);
                 return new ResponseEntity<>(results, HttpStatus.OK);
             }
         } catch (Exception e) {
             logger.error("Error in POST /api/search", e);
             return new ResponseEntity<>("Error interno", HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private List<Map<String,Object>> limitResults(List<Map<String,Object>> results, int max) {
+        if (results == null) return java.util.Collections.emptyList();
+        if (max <= 0) return java.util.Collections.emptyList();
+        if (results.size() <= max) return results;
+        return new java.util.ArrayList<>(results.subList(0, max));
     }
 
     private int compareResults(Map<String,Object> a, Map<String,Object> b) {
@@ -224,6 +245,49 @@ public class SearchController {
         }
     }
 
+    private Set<Integer> toIntegerSet(Object v) {
+        if (v == null) return null;
+        LinkedHashSet<Integer> out = new LinkedHashSet<>();
+        try {
+            if (v instanceof Collection) {
+                for (Object o : (Collection<?>) v) {
+                    Integer i = toInteger(o);
+                    if (i == null) return null;
+                    out.add(i);
+                }
+                return out;
+            }
+            if (v.getClass().isArray()) {
+                Object[] arr = (Object[]) v;
+                for (Object o : arr) {
+                    Integer i = toInteger(o);
+                    if (i == null) return null;
+                    out.add(i);
+                }
+                return out;
+            }
+            // tolerate comma/space separated strings like "1,2,4" or "1 2 4"
+            String s = v.toString();
+            if (s == null || s.isBlank()) return null;
+            if (s.contains(",") || s.contains(" ") || s.contains(";")) {
+                String[] parts = s.split("[,;\\s]+");
+                for (String p : parts) {
+                    if (p == null || p.isBlank()) continue;
+                    Integer i = toInteger(p.trim());
+                    if (i == null) return null;
+                    out.add(i);
+                }
+                return out;
+            }
+            Integer single = toInteger(v);
+            if (single == null) return null;
+            out.add(single);
+            return out;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private boolean applyResidenciaFilters(Residencia r, Map<String,Object> filters) {
         if (r == null) return false;
         // Exclude residencias con estado ELIMINADO/OCULTO
@@ -275,11 +339,21 @@ public class SearchController {
         } catch (Exception ignored) {}
             if (filters != null && !filters.isEmpty()) {
             try {
+                // capacidad:
+                // - if provided as scalar -> exact match
+                // - if provided as list/CSV -> matches any of the exact values
+                // Back-compat: capacity minimum can be expressed as capacidadMin
                 Object capacidad = filters.get("capacidad");
                 if (capacidad != null) {
-                    Integer c = toInteger(capacidad);
-                    if (c == null) return false; // invalid filter value provided
-                    if (h.getCapacidad() == null || h.getCapacidad() < c) return false;
+                    Set<Integer> allowed = toIntegerSet(capacidad);
+                    if (allowed == null || allowed.isEmpty()) return false; // invalid filter value provided
+                    if (h.getCapacidad() == null || !allowed.contains(h.getCapacidad())) return false;
+                }
+                Object capacidadMin = filters.get("capacidadMin");
+                if (capacidadMin != null) {
+                    Integer cmin = toInteger(capacidadMin);
+                    if (cmin == null) return false;
+                    if (h.getCapacidad() == null || h.getCapacidad() < cmin) return false;
                 }
 
                 Object piso = filters.get("piso");

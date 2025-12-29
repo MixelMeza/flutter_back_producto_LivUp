@@ -37,12 +37,17 @@ public class VistaRecienteServiceImpl implements VistaRecienteService {
         if (h == null || u == null) return;
 
         vistaRepository.findByUsuarioIdAndHabitacionId(usuarioId, habitacionId).ifPresentOrElse(v -> {
+            try {
+                Integer cur = v.getCount();
+                v.setCount(cur == null ? 1 : (cur + 1));
+            } catch (Exception ignore) { v.setCount(1); }
             v.setVistoEn(Instant.now());
             vistaRepository.save(v);
         }, () -> {
             VistaReciente v = new VistaReciente();
             v.setUsuario(u);
             v.setHabitacion(h);
+            v.setCount(1);
             v.setVistoEn(Instant.now());
             vistaRepository.save(v);
         });
@@ -58,12 +63,17 @@ public class VistaRecienteServiceImpl implements VistaRecienteService {
         if (h == null) return;
 
         vistaRepository.findBySessionUuidAndHabitacionId(sessionUuid, habitacionId).ifPresentOrElse(v -> {
+            try {
+                Integer cur = v.getCount();
+                v.setCount(cur == null ? 1 : (cur + 1));
+            } catch (Exception ignore) { v.setCount(1); }
             v.setVistoEn(Instant.now());
             vistaRepository.save(v);
         }, () -> {
             VistaReciente v = new VistaReciente();
             v.setSessionUuid(sessionUuid);
             v.setHabitacion(h);
+            v.setCount(1);
             v.setVistoEn(Instant.now());
             vistaRepository.save(v);
         });
