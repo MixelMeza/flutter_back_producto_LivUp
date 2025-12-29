@@ -1,7 +1,6 @@
-package edu.pe.residencias.model.entity;
+package edu.pe.residencias.model.entity.analytics;
 
-import java.time.LocalDateTime;
-
+import edu.pe.residencias.model.entity.Habitacion;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -12,39 +11,31 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
 @Setter
+@NoArgsConstructor
 @Entity
-@Table(name = "favoritos", uniqueConstraints = @UniqueConstraint(columnNames = {"usuario_id","habitacion_id"}))
-public class Favorito {
+@Table(
+        name = "favoritos_habitacion_semana",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"habitacion_id", "week_key"})
+)
+public class FavoritoHabitacionSemana {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "usuario_id", nullable = false)
-    private Usuario usuario;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "habitacion_id", nullable = false)
     private Habitacion habitacion;
 
-    @Column(name = "fecha", nullable = false)
-        private LocalDateTime fecha;
+    @Column(name = "week_key", nullable = false, length = 8)
+    private String weekKey;
 
-        @jakarta.persistence.PrePersist
-        public void prePersist() {
-            if (this.fecha == null) {
-                this.fecha = edu.pe.residencias.util.DateTimeUtil.nowLima();
-            }
-        }
+    @Column(name = "total_favoritos", nullable = false)
+    private Long totalFavoritos = 0L;
 }

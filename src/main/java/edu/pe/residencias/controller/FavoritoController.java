@@ -22,6 +22,7 @@ import edu.pe.residencias.repository.FavoritoRepository;
 import edu.pe.residencias.model.dto.FavoritoDTO;
 import java.util.ArrayList;
 import java.util.Comparator;
+import edu.pe.residencias.service.HabitacionStatsSemanaService;
 
 @RestController
 @RequestMapping("/api/favoritos")
@@ -38,6 +39,9 @@ public class FavoritoController {
     
     @Autowired
     private FavoritoRepository favoritoRepository;
+
+    @Autowired
+    private HabitacionStatsSemanaService statsSemanaService;
 
     @GetMapping("/mine")
     public ResponseEntity<?> getMisFavoritos(HttpServletRequest request) {
@@ -142,8 +146,16 @@ public class FavoritoController {
             if (!Boolean.TRUE.equals(usuario.getEmailVerificado())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Email no verificado");
             }
+
+            Long habitacionId = (favorito.getHabitacion() != null) ? favorito.getHabitacion().getId() : null;
+            boolean existed = (habitacionId != null) && favoritoRepository.existsByUsuarioIdAndHabitacionId(usuario.getId(), habitacionId);
+
             favorito.setUsuario(usuario);
             Favorito saved = favoritoService.save(favorito);
+
+            if (habitacionId != null && !existed) {
+                statsSemanaService.incrementarFavorito(habitacionId);
+            }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (io.jsonwebtoken.JwtException | IllegalArgumentException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Token inválido");

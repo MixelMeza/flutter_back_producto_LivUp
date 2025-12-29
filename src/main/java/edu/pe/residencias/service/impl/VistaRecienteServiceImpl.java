@@ -1,6 +1,5 @@
 package edu.pe.residencias.service.impl;
 
-import java.time.Instant;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,14 +40,14 @@ public class VistaRecienteServiceImpl implements VistaRecienteService {
                 Integer cur = v.getCount();
                 v.setCount(cur == null ? 1 : (cur + 1));
             } catch (Exception ignore) { v.setCount(1); }
-            v.setVistoEn(Instant.now());
+            v.setVistoEn(edu.pe.residencias.util.DateTimeUtil.nowLima());
             vistaRepository.save(v);
         }, () -> {
             VistaReciente v = new VistaReciente();
             v.setUsuario(u);
             v.setHabitacion(h);
             v.setCount(1);
-            v.setVistoEn(Instant.now());
+            v.setVistoEn(edu.pe.residencias.util.DateTimeUtil.nowLima());
             vistaRepository.save(v);
         });
 
@@ -67,14 +66,14 @@ public class VistaRecienteServiceImpl implements VistaRecienteService {
                 Integer cur = v.getCount();
                 v.setCount(cur == null ? 1 : (cur + 1));
             } catch (Exception ignore) { v.setCount(1); }
-            v.setVistoEn(Instant.now());
+            v.setVistoEn(edu.pe.residencias.util.DateTimeUtil.nowLima());
             vistaRepository.save(v);
         }, () -> {
             VistaReciente v = new VistaReciente();
             v.setSessionUuid(sessionUuid);
             v.setHabitacion(h);
             v.setCount(1);
-            v.setVistoEn(Instant.now());
+            v.setVistoEn(edu.pe.residencias.util.DateTimeUtil.nowLima());
             vistaRepository.save(v);
         });
     }

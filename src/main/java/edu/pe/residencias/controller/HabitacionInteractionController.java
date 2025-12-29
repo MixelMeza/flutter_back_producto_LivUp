@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import edu.pe.residencias.model.entity.VistaReciente;
 import edu.pe.residencias.security.JwtUtil;
 import edu.pe.residencias.service.FavoritoService;
+import edu.pe.residencias.service.HabitacionStatsSemanaService;
 import edu.pe.residencias.service.VistaRecienteService;
 import edu.pe.residencias.repository.UsuarioRepository;
 import edu.pe.residencias.model.entity.Usuario;
@@ -38,12 +39,20 @@ public class HabitacionInteractionController {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private HabitacionStatsSemanaService statsSemanaService;
+
     // POST /api/habitaciones/{id}/like  -> mark like
     @PostMapping("/{id}/like")
     public ResponseEntity<?> like(@PathVariable Long id, @RequestHeader(value = "Authorization", required = false) String authHeader) {
         Long userId = extractUserIdFromAuth(authHeader);
         if (userId == null) return ResponseEntity.status(401).build();
-        favoritoService.like(userId, id);
+
+        boolean alreadyLiked = favoritoService.isLiked(userId, id);
+        if (!alreadyLiked) {
+            favoritoService.like(userId, id);
+            statsSemanaService.incrementarFavorito(id);
+        }
         return ResponseEntity.ok().build();
     }
 
@@ -75,10 +84,12 @@ public class HabitacionInteractionController {
                                         @RequestParam(value = "sessionUuid", required = false) String sessionUuid) {
         Long userId = extractUserIdFromAuth(authHeader);
         if (userId != null) {
+            statsSemanaService.incrementarVista(id);
             vistaService.recordViewForUser(userId, id);
             return ResponseEntity.ok().build();
         }
         if (sessionUuid != null && !sessionUuid.isEmpty()) {
+            statsSemanaService.incrementarVista(id);
             vistaService.recordViewForSession(sessionUuid, id);
             return ResponseEntity.ok().build();
         }

@@ -33,4 +33,11 @@ public interface ResidenciaRepository extends JpaRepository<Residencia, Long> {
 	// Residencias whose residencia.estado is active and whose usuario has email verified and is active
 	@Query("select r from Residencia r join r.usuario u join r.ubicacion ub where lower(r.estado) = 'activo' and u.emailVerificado = true and lower(u.estado) = 'activo'")
 	java.util.List<Residencia> findAllActiveWithVerifiedUsuario();
+
+	// Featured residencias: return only IDs (for lightweight mobile requests)
+	@Query("select r.id from Residencia r join r.usuario u join r.ubicacion ub "
+			+ "where lower(r.estado) = 'activo' and u.emailVerificado = true and lower(u.estado) = 'activo' "
+			+ "and r.destacado = true "
+			+ "order by case when r.destacadoFecha is null then 1 else 0 end, r.destacadoFecha desc, r.id desc")
+	java.util.List<Long> findFeaturedResidenciaIds();
 }

@@ -1,6 +1,6 @@
 package edu.pe.residencias.model.entity;
 
-import java.time.Instant;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -45,5 +45,15 @@ public class VistaReciente {
     private Integer count = 1;
 
     @Column(name = "visto_en", nullable = false)
-    private Instant vistoEn = Instant.now();
+    private LocalDateTime vistoEn = edu.pe.residencias.util.DateTimeUtil.nowLima();
+
+    @jakarta.persistence.PrePersist
+    public void prePersist() {
+        if (this.vistoEn == null) {
+            this.vistoEn = edu.pe.residencias.util.DateTimeUtil.nowLima();
+        }
+        if (this.count == null) {
+            this.count = 1;
+        }
+    }
 }

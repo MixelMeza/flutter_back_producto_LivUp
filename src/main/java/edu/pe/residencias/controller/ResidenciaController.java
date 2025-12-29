@@ -107,6 +107,21 @@ public class ResidenciaController {
         }
     }
 
+    // GET featured residencias (IDs only)
+    @GetMapping("/destacadas/ids")
+    public ResponseEntity<List<Long>> getResidenciasDestacadasIds() {
+        try {
+            List<Long> ids = residenciaRepository.findFeaturedResidenciaIds();
+            if (ids == null || ids.isEmpty()) {
+                return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+            }
+            return new ResponseEntity<>(ids, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("Error fetching featured residencia ids", e);
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     // Helper: create habitacion entity from DTO after auth/ownership checks
     private ResponseEntity<?> createHabitacionHelper(HttpServletRequest request,
                                                     Long residenciaId,

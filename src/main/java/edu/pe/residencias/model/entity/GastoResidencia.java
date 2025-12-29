@@ -83,7 +83,7 @@ public class GastoResidencia {
 
     @PreUpdate
     public void preUpdate() {
-        if (createdAt == null) createdAt = java.time.LocalDateTime.now();
+        if (createdAt == null) createdAt = edu.pe.residencias.util.DateTimeUtil.nowLima();
     }
 
         @Override

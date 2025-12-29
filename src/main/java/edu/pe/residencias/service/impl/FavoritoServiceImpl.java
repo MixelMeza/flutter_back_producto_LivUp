@@ -1,6 +1,5 @@
 package edu.pe.residencias.service.impl;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +40,7 @@ public class FavoritoServiceImpl implements FavoritoService {
         Favorito f = new Favorito();
         f.setUsuario(u);
         f.setHabitacion(h);
-        f.setFecha(Instant.now());
+        f.setFecha(edu.pe.residencias.util.DateTimeUtil.nowLima());
         favoritoRepository.save(f);
     }
 
