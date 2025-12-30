@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import edu.pe.residencias.model.dto.HabitacionStatsCardDTO;
@@ -20,11 +21,15 @@ import edu.pe.residencias.repository.HabitacionRepository;
 import edu.pe.residencias.repository.ImagenHabitacionRepository;
 import edu.pe.residencias.repository.UsuarioRepository;
 import edu.pe.residencias.security.JwtUtil;
+import edu.pe.residencias.service.HabitacionStatsSemanaService;
 import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/stats/habitaciones")
 public class StatsController {
+
+	@Autowired
+	private HabitacionStatsSemanaService statsSemanaService;
 
 	@Autowired
 	private HabitacionRepository habitacionRepository;
@@ -88,6 +93,21 @@ public class StatsController {
 		} catch (Exception ex) {
 			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
 		}
+	}
+
+	// Endpoints que existían antes (para HomePage): devuelven SOLO IDs
+	@GetMapping("/mas-vistas-semana")
+	public ResponseEntity<List<Long>> masVistasSemana(@RequestParam(name = "limit", defaultValue = "10") int limit) {
+		List<Long> ids = statsSemanaService.masVistasSemana(limit);
+		if (ids == null || ids.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+		return new ResponseEntity<>(ids, HttpStatus.OK);
+	}
+
+	@GetMapping("/mas-likeadas-semana")
+	public ResponseEntity<List<Long>> masLikeadasSemana(@RequestParam(name = "limit", defaultValue = "10") int limit) {
+		List<Long> ids = statsSemanaService.masLikeadasSemana(limit);
+		if (ids == null || ids.isEmpty()) return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+		return new ResponseEntity<>(ids, HttpStatus.OK);
 	}
 
 	private Long resolveUsuarioIdFromTokenIfPresent(HttpServletRequest request) {
