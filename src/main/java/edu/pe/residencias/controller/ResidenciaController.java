@@ -312,6 +312,7 @@ public class ResidenciaController {
             dto.setTelefonoContacto(r.getTelefonoContacto());
             dto.setEmailContacto(r.getEmailContacto());
             dto.setServicios(r.getServicios());
+            dto.setReglamentoUrl(r.getReglamentoUrl());
             dto.setEstado(r.getEstado());
             dto.setCreatedAt(r.getCreatedAt());
 

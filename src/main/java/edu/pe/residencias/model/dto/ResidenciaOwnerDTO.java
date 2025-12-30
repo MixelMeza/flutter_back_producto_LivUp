@@ -21,6 +21,7 @@ public class ResidenciaOwnerDTO {
     private String emailContacto;
     private String servicios;
     private String estado;
+    private String reglamentoUrl;
     private LocalDateTime createdAt;
     private UbicacionDTO ubicacion;
     private List<String> imagenes;
