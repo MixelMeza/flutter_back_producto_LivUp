@@ -59,6 +59,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         try {
             // If token was invalidated (logout), reject immediately
             if (invalidatedTokenRepository.findByToken(token).isPresent()) {
+                // DEBUG: log rejected token and request path
+                System.out.println("[JwtRequestFilter] Rejected invalidated token for path=" + path + " token=" + (token == null ? "<null>" : token));
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Token invalidated");
                 return;

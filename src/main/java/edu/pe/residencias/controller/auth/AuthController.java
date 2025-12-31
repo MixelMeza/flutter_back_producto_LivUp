@@ -109,6 +109,8 @@ public class AuthController {
             // generate token based on uuid column and include encrypted username and role
             String roleName = u.getRol() == null ? null : u.getRol().getNombre();
             String token = jwtUtil.generateToken(java.util.UUID.fromString(u.getUuid()), u.getUsername(), roleName);
+            // DEBUG: log generated token (for troubleshooting only)
+            System.out.println("[AuthController] Generated token for userId=" + u.getId() + " token=" + token);
 
             // register acceso (device) using DispositivoService + create acceso event
             try {
@@ -627,6 +629,7 @@ public class AuthController {
                 if (token != null && !token.isBlank()) {
                     // avoid duplicate entries
                     invalidatedTokenRepository.findByToken(token).orElseGet(() -> {
+                        System.out.println("[AuthController] Invalidating token (logout) for userId=" + user.getId() + " token=" + token);
                         edu.pe.residencias.model.entity.InvalidatedToken it = new edu.pe.residencias.model.entity.InvalidatedToken();
                         it.setToken(token);
                         it.setCreatedAt(edu.pe.residencias.util.DateTimeUtil.nowLima());
