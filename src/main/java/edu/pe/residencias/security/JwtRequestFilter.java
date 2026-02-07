@@ -55,14 +55,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             || "/api/public/keepalive".equals(path)
             || "/api/public/app-status".equals(path)
             || "/api/search".equals(path)
+            || "/api/payments/webhook".equals(path)
             || "/api/solicitudes-alojamiento/vencidas".equals(path)
             || "/api/public/backups/run".equals(path)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Allow Mercado Pago webhook (public) without JWT
-        if ("/api/payments/webhook".equals(path)) {
             filterChain.doFilter(request, response);
             return;
         }
