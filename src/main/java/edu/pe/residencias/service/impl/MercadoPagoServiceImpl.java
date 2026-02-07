@@ -65,6 +65,41 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
 
             String requestBody = objectMapper.writeValueAsString(body);
 
+            // Structured logging of request details (only if present)
+            try {
+                JsonNode reqJson = objectMapper.readTree(requestBody);
+                String transactionAmount = reqJson.has("transaction_amount") ? reqJson.get("transaction_amount").asText() : null;
+                String paymentMethodId = reqJson.has("payment_method_id") ? reqJson.get("payment_method_id").asText() : null;
+                String installments = reqJson.has("installments") ? reqJson.get("installments").asText() : null;
+                String payerEmail = null;
+                String payerIdType = null;
+                String payerIdNumber = null;
+                if (reqJson.has("payer")) {
+                    JsonNode payer = reqJson.get("payer");
+                    payerEmail = payer.has("email") ? payer.get("email").asText(null) : null;
+                    if (payer.has("identification")) {
+                        JsonNode idn = payer.get("identification");
+                        payerIdType = idn.has("type") ? idn.get("type").asText(null) : null;
+                        payerIdNumber = idn.has("number") ? idn.get("number").asText(null) : null;
+                    }
+                }
+
+                String tokenPreview = token == null ? null : token.substring(0, Math.min(15, token.length()));
+
+                StringBuilder sb = new StringBuilder();
+                sb.append("[MP REQUEST]\n");
+                if (transactionAmount != null) sb.append("transaction_amount=").append(transactionAmount).append("\n");
+                if (paymentMethodId != null) sb.append("payment_method_id=").append(paymentMethodId).append("\n");
+                if (installments != null) sb.append("installments=").append(installments).append("\n");
+                if (payerEmail != null) sb.append("payer.email=").append(payerEmail).append("\n");
+                if (payerIdType != null) sb.append("payer.identification.type=").append(payerIdType).append("\n");
+                if (payerIdNumber != null) sb.append("payer.identification.number=").append(payerIdNumber).append("\n");
+                if (tokenPreview != null) sb.append("token_preview=").append(tokenPreview).append("\n");
+                LOGGER.info(sb.toString());
+            } catch (Exception ex) {
+                LOGGER.warn("Failed to extract MP request fields for logging", ex);
+            }
+
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.mercadopago.com/checkout/preferences"))
                     .timeout(Duration.ofSeconds(20))
@@ -73,13 +108,43 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response;
+            try {
+                response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            } catch (Exception ex) {
+                LOGGER.error("Error sending request to Mercado Pago", ex);
+                throw ex;
+            }
 
             int status = response.statusCode();
             String bodyResp = response.body();
+
+            // Log full response JSON and key fields if present
+            try {
+                StringBuilder sbResp = new StringBuilder();
+                sbResp.append("[MP RESPONSE]\n");
+                if (bodyResp != null) {
+                    JsonNode respJson = objectMapper.readTree(bodyResp);
+                    String respStatus = respJson.has("status") ? respJson.get("status").asText(null) : null;
+                    String respStatusDetail = respJson.has("status_detail") ? respJson.get("status_detail").asText(null) : null;
+                    String respId = respJson.has("id") ? respJson.get("id").asText(null) : null;
+                    if (respId != null) sbResp.append("id=").append(respId).append("\n");
+                    if (respStatus != null) sbResp.append("status=").append(respStatus).append("\n");
+                    if (respStatusDetail != null) sbResp.append("status_detail=").append(respStatusDetail).append("\n");
+                    sbResp.append("body=").append(bodyResp).append("\n");
+                } else {
+                    sbResp.append("body=null\n");
+                }
+                LOGGER.info(sbResp.toString());
+            } catch (Exception ex) {
+                LOGGER.warn("Failed to parse Mercado Pago response for structured logging", ex);
+                LOGGER.info("[MP RESPONSE] raw body={}", bodyResp);
+            }
+
             if (status < 200 || status >= 300) {
+                // Log error body explicitly then throw
                 LOGGER.error("MercadoPago create preference failed: status={} body={}", status, bodyResp);
-                throw new MercadoPagoException("Error creating Mercado Pago preference: status=" + status);
+                throw new MercadoPagoException("Error creating Mercado Pago preference: status=" + status + " body=" + bodyResp);
             }
 
             JsonNode json = objectMapper.readTree(bodyResp);

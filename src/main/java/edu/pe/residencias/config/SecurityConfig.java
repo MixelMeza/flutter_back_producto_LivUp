@@ -25,7 +25,8 @@ public class SecurityConfig {
         http
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
-                .anyRequest().permitAll()
+                .requestMatchers("/api/payments/webhook").permitAll()
+                .anyRequest().authenticated()
             );
         // register JWT filter to enforce Authorization header on most endpoints
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);

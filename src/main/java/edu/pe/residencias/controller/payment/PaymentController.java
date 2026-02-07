@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
+import edu.pe.residencias.service.WebhookService;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -22,9 +23,11 @@ public class PaymentController {
     private static final Logger LOGGER = LoggerFactory.getLogger(PaymentController.class);
 
     private final MercadoPagoService mercadoPagoService;
+    private final WebhookService webhookService;
 
-    public PaymentController(MercadoPagoService mercadoPagoService) {
+    public PaymentController(MercadoPagoService mercadoPagoService, WebhookService webhookService) {
         this.mercadoPagoService = mercadoPagoService;
+        this.webhookService = webhookService;
     }
 
     @PostMapping(path = "/create", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -37,23 +40,30 @@ public class PaymentController {
     public ResponseEntity<String> webhook(HttpServletRequest servletRequest, @RequestBody String payload) {
         // Basic webhook receiver: try to extract payment id and delegate to service.
         LOGGER.info("Received Mercado Pago webhook: {}", payload);
+        // Log full payload
+        LOGGER.info("Webhook payload: {}", payload);
         try {
             com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
             com.fasterxml.jackson.databind.JsonNode root = om.readTree(payload);
+            String type = root.has("type") ? root.get("type").asText(null) : null;
             String paymentId = null;
-            // common formats: {"data": {"id": "123"}} or {"type": "payment", "data": {"id": "123"}}
             if (root.has("data") && root.get("data").has("id")) {
                 paymentId = root.get("data").get("id").asText(null);
             } else if (root.has("id")) {
                 paymentId = root.get("id").asText(null);
             }
-            if (paymentId != null) {
-                boolean handled = mercadoPagoService.handlePaymentNotification(paymentId);
-                if (handled) return ResponseEntity.ok("handled");
+
+            LOGGER.info("Webhook extracted - type='{}' data.id='{}'", type, paymentId);
+
+            if ("payment".equalsIgnoreCase(type) && paymentId != null) {
+                // delegate to WebhookService which handles errors internally
+                webhookService.processPaymentNotification(paymentId);
             }
         } catch (Exception ex) {
-            LOGGER.warn("Error processing webhook payload", ex);
+            LOGGER.warn("Error parsing webhook payload", ex);
         }
+
+        // Always return 200 immediately
         return ResponseEntity.ok("received");
     }
 
