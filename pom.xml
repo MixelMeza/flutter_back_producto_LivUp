@@ -105,6 +105,13 @@
 			<version>9.2.0</version>
 		</dependency>
 		<!-- Resend Java SDK for sending email via Resend service -->
+		
+		<!-- Mercado Pago Java SDK (official). Replace version with the latest stable release in production. -->
+		<dependency>
+			<groupId>com.mercadopago</groupId>
+			<artifactId>sdk-java</artifactId>
+			<version>1.10.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
