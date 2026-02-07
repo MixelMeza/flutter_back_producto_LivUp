@@ -4,6 +4,8 @@ import java.io.IOException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import jakarta.servlet.FilterChain;
@@ -20,6 +22,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
     @Autowired
     private InvalidatedTokenRepository invalidatedTokenRepository;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JwtRequestFilter.class);
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -57,6 +61,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Allow Mercado Pago webhook (public) without JWT
+        if ("/api/payments/webhook".equals(path)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -68,8 +78,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         try {
             // If token was invalidated (logout), reject immediately
             if (invalidatedTokenRepository.findByToken(token).isPresent()) {
-                // DEBUG: log rejected token and request path
-                System.out.println("[JwtRequestFilter] Rejected invalidated token for path=" + path + " token=" + (token == null ? "<null>" : token));
+                // DEBUG: log rejected token and request path (mask token tail for safety)
+                String mask = token == null ? "<null>" : (token.length() <= 8 ? token : token.substring(0, 8) + "...[masked]");
+                LOGGER.debug("Rejected invalidated token for path={} tokenPreview={}", path, mask);
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.getWriter().write("Token invalidated");
                 return;
