@@ -19,7 +19,6 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -334,7 +333,7 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
                         LOGGER.info("{} Full payment response: {}", prefixPayment, pBody == null ? "null" : pBody);
 
                         com.fasterxml.jackson.databind.JsonNode payJson = objectMapper.readTree(pBody == null ? "{}" : pBody);
-                        String status = payJson.has("status") ? payJson.get("status").asText(null) : null;
+                        String paymentStatus = payJson.has("status") ? payJson.get("status").asText(null) : null;
                         String statusDetail = payJson.has("status_detail") ? payJson.get("status_detail").asText(null) : null;
                         String transactionAmount = payJson.has("transaction_amount") ? payJson.get("transaction_amount").asText(null) : null;
                         String paymentMethodId = payJson.has("payment_method_id") ? payJson.get("payment_method_id").asText(null) : null;
@@ -346,11 +345,11 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
                         String prefExternalRef = payJson.has("external_reference") ? payJson.get("external_reference").asText(null) : null;
 
                         LOGGER.info("{} payment.id={} status={} status_detail={} transaction_amount={} payment_method_id={} date_created={} date_approved={} payer.email={} metadata={} external_reference={}",
-                                prefixPayment, pid, status, statusDetail, transactionAmount, paymentMethodId, dateCreated, dateApproved, payerEmail, metadata, prefExternalRef);
+                                prefixPayment, pid, paymentStatus, statusDetail, transactionAmount, paymentMethodId, dateCreated, dateApproved, payerEmail, metadata, prefExternalRef);
 
-                        if ("approved".equalsIgnoreCase(status)) {
+                        if ("approved".equalsIgnoreCase(paymentStatus)) {
                             LOGGER.info("{} PAYMENT APPROVED for order {}", prefixPayment, externalRef);
-                        } else if ("rejected".equalsIgnoreCase(status)) {
+                        } else if ("rejected".equalsIgnoreCase(paymentStatus)) {
                             LOGGER.info("{} PAYMENT REJECTED", prefixPayment);
                             LOGGER.info("{} REJECTION DETAIL: {}", prefixPayment, statusDetail);
                         }
