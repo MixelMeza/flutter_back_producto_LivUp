@@ -46,18 +46,19 @@ public class PaymentController {
             com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
             com.fasterxml.jackson.databind.JsonNode root = om.readTree(payload);
             String type = root.has("type") ? root.get("type").asText(null) : null;
-            String paymentId = null;
+            String resourceId = null;
             if (root.has("data") && root.get("data").has("id")) {
-                paymentId = root.get("data").get("id").asText(null);
+                resourceId = root.get("data").get("id").asText(null);
             } else if (root.has("id")) {
-                paymentId = root.get("id").asText(null);
+                resourceId = root.get("id").asText(null);
             }
 
-            LOGGER.info("Webhook extracted - type='{}' data.id='{}'", type, paymentId);
+            LOGGER.info("Webhook extracted - type='{}' data.id='{}'", type, resourceId);
 
-            if ("payment".equalsIgnoreCase(type) && paymentId != null) {
-                // delegate to WebhookService which handles errors internally
-                webhookService.processPaymentNotification(paymentId);
+            if ("payment".equalsIgnoreCase(type) && resourceId != null) {
+                webhookService.processPaymentNotification(resourceId);
+            } else if ("merchant_order".equalsIgnoreCase(type) && resourceId != null) {
+                webhookService.processMerchantOrderNotification(resourceId);
             }
         } catch (Exception ex) {
             LOGGER.warn("Error parsing webhook payload", ex);

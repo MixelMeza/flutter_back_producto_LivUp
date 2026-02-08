@@ -9,12 +9,16 @@ import edu.pe.residencias.exception.MercadoPagoException;
 import edu.pe.residencias.service.MercadoPagoService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +30,13 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
 
     private final MercadoPagoConfig config;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private final RestTemplate restTemplate;
     private final edu.pe.residencias.service.ResidenciaService residenciaService;
 
-    public MercadoPagoServiceImpl(MercadoPagoConfig config, ObjectMapper objectMapper, edu.pe.residencias.service.ResidenciaService residenciaService) {
+    public MercadoPagoServiceImpl(MercadoPagoConfig config, ObjectMapper objectMapper, RestTemplate restTemplate, edu.pe.residencias.service.ResidenciaService residenciaService) {
         this.config = config;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.restTemplate = restTemplate;
         this.residenciaService = residenciaService;
     }
 
@@ -100,24 +104,14 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
                 LOGGER.warn("Failed to extract MP request fields for logging", ex);
             }
 
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.mercadopago.com/checkout/preferences"))
-                    .timeout(Duration.ofSeconds(20))
-                    .header("Authorization", "Bearer " + token)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-
-            HttpResponse<String> response;
-            try {
-                response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            } catch (Exception ex) {
-                LOGGER.error("Error sending request to Mercado Pago", ex);
-                throw ex;
-            }
-
-            int status = response.statusCode();
-            String bodyResp = response.body();
+            String url = "https://api.mercadopago.com/checkout/preferences";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+            HttpEntity<String> reqEntity = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> respEntity = restTemplate.exchange(url, HttpMethod.POST, reqEntity, String.class);
+            int status = respEntity.getStatusCodeValue();
+            String bodyResp = respEntity.getBody();
 
             // Log full response JSON and key fields if present
             try {
@@ -142,12 +136,11 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
             }
 
             if (status < 200 || status >= 300) {
-                // Log error body explicitly then throw
                 LOGGER.error("MercadoPago create preference failed: status={} body={}", status, bodyResp);
                 throw new MercadoPagoException("Error creating Mercado Pago preference: status=" + status + " body=" + bodyResp);
             }
 
-            JsonNode json = objectMapper.readTree(bodyResp);
+            JsonNode json = objectMapper.readTree(bodyResp == null ? "{}" : bodyResp);
             String initPoint = json.has("init_point") ? json.get("init_point").asText(null) : null;
             String prefId = json.has("id") ? json.get("id").asText(null) : null;
 
@@ -168,6 +161,134 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
 
     private String getAccessTokenHeader() {
         return "Bearer " + config.getAccessToken();
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode getMerchantOrder(Long id) {
+        try {
+            String url = "https://api.mercadopago.com/merchant_orders/" + id;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.AUTHORIZATION, getAccessTokenHeader());
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            String body = resp.getBody();
+            return objectMapper.readTree(body == null ? "{}" : body);
+        } catch (HttpStatusCodeException hex) {
+            LOGGER.error("Error fetching merchant order {}: body={}", id, hex.getResponseBodyAsString());
+            return null;
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error fetching merchant order {}", id, ex);
+            return null;
+        }
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode getPayment(Long paymentId) {
+        try {
+            String url = "https://api.mercadopago.com/v1/payments/" + paymentId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.AUTHORIZATION, getAccessTokenHeader());
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            String body = resp.getBody();
+            return objectMapper.readTree(body == null ? "{}" : body);
+        } catch (HttpStatusCodeException hex) {
+            LOGGER.error("Error fetching payment {}: body={}", paymentId, hex.getResponseBodyAsString());
+            return null;
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error fetching payment {}", paymentId, ex);
+            return null;
+        }
+    }
+
+    @Override
+    public CreatePaymentResponse createCheckoutPreference(BigDecimal amount, String title, String externalReference, String payerEmail, String dni) {
+        try {
+            String token = config.getAccessToken();
+            if (token == null || token.isBlank()) {
+                throw new MercadoPagoException("Mercado Pago access token not configured");
+            }
+
+            Map<String, Object> item = new HashMap<>();
+            item.put("title", title);
+            item.put("quantity", 1);
+            item.put("currency_id", "PEN");
+            item.put("unit_price", amount);
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("items", new Object[]{item});
+            if (externalReference != null && !externalReference.isBlank()) body.put("external_reference", externalReference);
+
+            // payer only if provided
+            if ((payerEmail != null && !payerEmail.isBlank()) || (dni != null && !dni.isBlank())) {
+                Map<String, Object> payer = new HashMap<>();
+                if (payerEmail != null && !payerEmail.isBlank()) payer.put("email", payerEmail);
+                if (dni != null && !dni.isBlank()) {
+                    Map<String, Object> id = new HashMap<>();
+                    id.put("type", "DNI");
+                    id.put("number", dni);
+                    payer.put("identification", id);
+                }
+                body.put("payer", payer);
+            }
+
+            // back_urls and auto_return
+            Map<String, String> backUrls = new HashMap<>();
+            String notif = config.getNotificationUrl();
+            backUrls.put("success", notif);
+            backUrls.put("failure", notif);
+            backUrls.put("pending", notif);
+            body.put("back_urls", backUrls);
+            body.put("auto_return", "approved");
+
+            String notificationUrl = config.getNotificationUrl();
+            if (notificationUrl != null && !notificationUrl.isBlank()) body.put("notification_url", notificationUrl);
+
+            // Log request summary
+            try {
+                StringBuilder reqLog = new StringBuilder();
+                reqLog.append("[MP REQUEST]\n");
+                if (externalReference != null) reqLog.append("externalReference=").append(externalReference).append("\n");
+                if (amount != null) reqLog.append("amount=").append(amount).append("\n");
+                LOGGER.info(reqLog.toString());
+            } catch (Exception ex) { LOGGER.warn("Failed logging MP request summary", ex); }
+
+            String url = "https://api.mercadopago.com/checkout/preferences";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+            String requestBody = objectMapper.writeValueAsString(body);
+            HttpEntity<String> reqEntity = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> respEntity = restTemplate.exchange(url, HttpMethod.POST, reqEntity, String.class);
+            String respBody = respEntity.getBody();
+
+            // Log response
+            try {
+                JsonNode respJson = objectMapper.readTree(respBody == null ? "{}" : respBody);
+                String prefId = respJson.has("id") ? respJson.get("id").asText(null) : null;
+                String initPoint = respJson.has("init_point") ? respJson.get("init_point").asText(null) : null;
+                String sandboxInit = respJson.has("sandbox_init_point") ? respJson.get("sandbox_init_point").asText(null) : null;
+                StringBuilder respLog = new StringBuilder();
+                respLog.append("[MP RESPONSE]\n");
+                if (prefId != null) respLog.append("preferenceId=").append(prefId).append("\n");
+                if (initPoint != null) respLog.append("initPoint=").append(initPoint).append("\n");
+                LOGGER.info(respLog.toString());
+                return new CreatePaymentResponse(initPoint, prefId);
+            } catch (Exception ex) {
+                LOGGER.warn("Failed to parse MP preference response", ex);
+                LOGGER.info("[MP RESPONSE] raw body={}", respBody);
+                JsonNode respJson = objectMapper.readTree(respBody == null ? "{}" : respBody);
+                String initPoint = respJson.has("init_point") ? respJson.get("init_point").asText(null) : null;
+                String prefId = respJson.has("id") ? respJson.get("id").asText(null) : null;
+                return new CreatePaymentResponse(initPoint, prefId);
+            }
+        } catch (HttpStatusCodeException hex) {
+            LOGGER.error("MercadoPago error body={}", hex.getResponseBodyAsString());
+            throw new MercadoPagoException("Error creating preference: " + hex.getStatusCode(), hex);
+        } catch (Exception ex) {
+            LOGGER.error("Unexpected error creating checkout preference", ex);
+            throw new MercadoPagoException("Unexpected error", ex);
+        }
     }
 
     @Override
@@ -195,24 +316,27 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
     private boolean preferenciaPagada(String preferenceId) throws Exception {
         if (preferenceId == null || preferenceId.isBlank()) return false;
         String url = "https://api.mercadopago.com/v1/payments/search?preference_id=" + preferenceId;
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(10))
-                .header("Authorization", getAccessTokenHeader())
-                .GET()
-                .build();
-        HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() >= 200 && resp.statusCode() < 300) {
-            JsonNode root = objectMapper.readTree(resp.body());
-            JsonNode results = root.has("results") ? root.get("results") : null;
-            if (results != null && results.isArray()) {
-                for (JsonNode p : results) {
-                    String status = p.has("status") ? p.get("status").asText("") : "";
-                    if ("approved".equalsIgnoreCase(status)) return true;
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.AUTHORIZATION, getAccessTokenHeader());
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            int status = resp.getStatusCodeValue();
+            String body = resp.getBody();
+            if (status >= 200 && status < 300) {
+                JsonNode root = objectMapper.readTree(body == null ? "{}" : body);
+                JsonNode results = root.has("results") ? root.get("results") : null;
+                if (results != null && results.isArray()) {
+                    for (JsonNode p : results) {
+                        String statusField = p.has("status") ? p.get("status").asText("") : "";
+                        if ("approved".equalsIgnoreCase(statusField)) return true;
+                    }
                 }
+            } else {
+                LOGGER.warn("Preference payments search returned status {} body={}", status, body);
             }
-        } else {
-            LOGGER.warn("Preference payments search returned status {} body={}", resp.statusCode(), resp.body());
+        } catch (HttpStatusCodeException hex) {
+            LOGGER.warn("Error searching payments for preference {}: {}", preferenceId, hex.getResponseBodyAsString());
         }
         return false;
     }
@@ -223,18 +347,15 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
             if (paymentId == null || paymentId.isBlank()) return false;
             // Get payment details
             String url = "https://api.mercadopago.com/v1/payments/" + paymentId;
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(10))
-                    .header("Authorization", getAccessTokenHeader())
-                    .GET()
-                    .build();
-            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-                LOGGER.warn("Failed to fetch payment {}: status={} body={}", paymentId, resp.statusCode(), resp.body());
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.AUTHORIZATION, getAccessTokenHeader());
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            if (resp.getStatusCodeValue() < 200 || resp.getStatusCodeValue() >= 300) {
+                LOGGER.warn("Failed to fetch payment {}: status={} body={}", paymentId, resp.getStatusCodeValue(), resp.getBody());
                 return false;
             }
-            JsonNode paymentJson = objectMapper.readTree(resp.body());
+            JsonNode paymentJson = objectMapper.readTree(resp.getBody() == null ? "{}" : resp.getBody());
             String status = paymentJson.has("status") ? paymentJson.get("status").asText("") : "";
             if (!"approved".equalsIgnoreCase(status)) return false;
 
@@ -255,18 +376,13 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
 
             // Get preference to read external_reference
             String prefUrl = "https://api.mercadopago.com/checkout/preferences/" + preferenceId;
-            HttpRequest prefReq = HttpRequest.newBuilder()
-                    .uri(URI.create(prefUrl))
-                    .timeout(Duration.ofSeconds(10))
-                    .header("Authorization", getAccessTokenHeader())
-                    .GET()
-                    .build();
-            HttpResponse<String> prefResp = httpClient.send(prefReq, HttpResponse.BodyHandlers.ofString());
-            if (prefResp.statusCode() < 200 || prefResp.statusCode() >= 300) {
-                LOGGER.warn("Failed to fetch preference {}: status={} body={}", preferenceId, prefResp.statusCode(), prefResp.body());
+            HttpEntity<Void> prefEntity = new HttpEntity<>(headers);
+            ResponseEntity<String> prefResp = restTemplate.exchange(prefUrl, HttpMethod.GET, prefEntity, String.class);
+            if (prefResp.getStatusCodeValue() < 200 || prefResp.getStatusCodeValue() >= 300) {
+                LOGGER.warn("Failed to fetch preference {}: status={} body={}", preferenceId, prefResp.getStatusCodeValue(), prefResp.getBody());
                 return false;
             }
-            JsonNode prefJson = objectMapper.readTree(prefResp.body());
+            JsonNode prefJson = objectMapper.readTree(prefResp.getBody() == null ? "{}" : prefResp.getBody());
             String externalRef = prefJson.has("external_reference") ? prefJson.get("external_reference").asText(null) : null;
             if (externalRef == null) {
                 LOGGER.warn("Preference {} has no external_reference", preferenceId);
