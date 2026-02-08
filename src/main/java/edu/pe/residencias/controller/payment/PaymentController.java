@@ -45,7 +45,11 @@ public class PaymentController {
         try {
             com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
             com.fasterxml.jackson.databind.JsonNode root = om.readTree(payload);
-            String type = root.has("type") ? root.get("type").asText(null) : null;
+            String type = null;
+            if (root.has("topic")) type = root.get("topic").asText(null);
+            if (type == null && root.has("type")) type = root.get("type").asText(null);
+
+            String resource = root.has("resource") ? root.get("resource").asText(null) : null;
             String resourceId = null;
             if (root.has("data") && root.get("data").has("id")) {
                 resourceId = root.get("data").get("id").asText(null);
@@ -53,12 +57,23 @@ public class PaymentController {
                 resourceId = root.get("id").asText(null);
             }
 
-            LOGGER.info("Webhook extracted - type='{}' data.id='{}'", type, resourceId);
+            // If merchant_order topic provides resource field, prefer it
+            String merchantOrderId = null;
+            if ("merchant_order".equalsIgnoreCase(type) && resource != null) merchantOrderId = resource;
+            else merchantOrderId = resourceId;
+
+            // Log required fields for merchant_order topic
+            if ("merchant_order".equalsIgnoreCase(type)) {
+                String timestamp = java.time.Instant.now().toString();
+                LOGGER.info("[MP WEBHOOK] topic={} resource={} merchant_order_id={} timestamp={}", type, resource, merchantOrderId, timestamp);
+            }
+
+            LOGGER.info("Webhook extracted - type='{}' data.id='{}' resource='{}'", type, resourceId, resource);
 
             if ("payment".equalsIgnoreCase(type) && resourceId != null) {
                 webhookService.processPaymentNotification(resourceId);
-            } else if ("merchant_order".equalsIgnoreCase(type) && resourceId != null) {
-                webhookService.processMerchantOrderNotification(resourceId);
+            } else if ("merchant_order".equalsIgnoreCase(type) && merchantOrderId != null) {
+                webhookService.processMerchantOrderNotification(merchantOrderId);
             }
         } catch (Exception ex) {
             LOGGER.warn("Error parsing webhook payload", ex);

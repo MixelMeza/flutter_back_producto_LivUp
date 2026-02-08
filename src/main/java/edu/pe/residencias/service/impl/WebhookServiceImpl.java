@@ -80,49 +80,15 @@ public class WebhookServiceImpl implements WebhookService {
             Long mid = null;
             try { mid = Long.valueOf(merchantOrderId); } catch (Exception e) { LOGGER.warn("Invalid merchant_order id {}", merchantOrderId); return; }
 
-            com.fasterxml.jackson.databind.JsonNode mo = mercadoPagoService.getMerchantOrder(mid);
-            if (mo == null) {
-                LOGGER.warn("No merchant_order found for id={}", merchantOrderId);
-                return;
+            // Delegate to MercadoPagoServiceImpl which contains the detailed processing/logging
+            try {
+                mercadoPagoService.processMerchantOrder(mid);
+            } catch (Exception ex) {
+                LOGGER.error("Error delegating merchant_order {} to MercadoPagoService: {}", merchantOrderId, ex.getMessage());
             }
 
-            String externalRef = mo.has("external_reference") ? mo.get("external_reference").asText(null) : null;
-            Long residenciaId = null;
-            if (externalRef != null) {
-                try { residenciaId = Long.valueOf(externalRef); } catch (Exception ex) { LOGGER.warn("Invalid external_reference {}", externalRef); }
-            }
-
-            com.fasterxml.jackson.databind.JsonNode payments = mo.has("payments") ? mo.get("payments") : null;
-            if (payments != null && payments.isArray()) {
-                for (com.fasterxml.jackson.databind.JsonNode p : payments) {
-                    String pid = p.has("id") ? p.get("id").asText(null) : null;
-                    if (pid == null) continue;
-                    com.fasterxml.jackson.databind.JsonNode paymentDetails = mercadoPagoService.getPayment(Long.valueOf(pid));
-                    if (paymentDetails != null) {
-                        String status = paymentDetails.has("status") ? paymentDetails.get("status").asText("") : null;
-                        String statusDetail = paymentDetails.has("status_detail") ? paymentDetails.get("status_detail").asText("") : null;
-                        LOGGER.info("MerchantOrder {} payment {} -> status='{}' status_detail='{}'", merchantOrderId, pid, status, statusDetail);
-
-                        // Try to find preference id for this payment
-                        String prefId = null;
-                        if (paymentDetails.has("preference_id")) prefId = paymentDetails.get("preference_id").asText(null);
-                        if (prefId == null && paymentDetails.has("order") && paymentDetails.get("order").has("preference_id")) {
-                            prefId = paymentDetails.get("order").get("preference_id").asText(null);
-                        }
-
-                        if (residenciaId != null && prefId != null) {
-                            try {
-                                boolean marked = mercadoPagoService.verifyPreferenceAndMarkResidencia(prefId, residenciaId);
-                                LOGGER.info("Marked residencia {} for preference {}: {}", residenciaId, prefId, marked);
-                            } catch (Exception ex) {
-                                LOGGER.warn("Error marking residencia {} for preference {}", residenciaId, prefId, ex);
-                            }
-                        }
-                    }
-                }
-            }
         } catch (Exception ex) {
-            LOGGER.error("Unexpected error processing merchant_order {}", merchantOrderId, ex);
+            LOGGER.error("Unexpected error in processMerchantOrderNotification {}", merchantOrderId, ex);
         }
     }
 }

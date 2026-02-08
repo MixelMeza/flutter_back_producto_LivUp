@@ -292,6 +292,104 @@ public class MercadoPagoServiceImpl implements MercadoPagoService {
     }
 
     @Override
+    public void processMerchantOrder(Long merchantOrderId) {
+        String prefixMO = "[MP MERCHANT ORDER]";
+        String prefixPayment = "[MP PAYMENT]";
+        if (merchantOrderId == null) {
+            LOGGER.warn("{} merchantOrderId is null", prefixMO);
+            return;
+        }
+
+        String url = "https://api.mercadopago.com/merchant_orders/" + merchantOrderId;
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.AUTHORIZATION, getAccessTokenHeader());
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            int status = resp.getStatusCodeValue();
+            String body = resp.getBody();
+
+            // Log full response JSON
+            LOGGER.info("{} Response status={}", prefixMO, status);
+            LOGGER.info("{} Full response: {}", prefixMO, body == null ? "null" : body);
+
+            com.fasterxml.jackson.databind.JsonNode mo = objectMapper.readTree(body == null ? "{}" : body);
+            com.fasterxml.jackson.databind.JsonNode payments = mo.has("payments") ? mo.get("payments") : null;
+            String externalRef = mo.has("external_reference") ? mo.get("external_reference").asText(null) : null;
+
+            LOGGER.info("{} external_reference={}", prefixMO, externalRef);
+            LOGGER.info("{} payments array={}", prefixMO, payments == null ? "null" : payments.toString());
+
+            if (payments != null && payments.isArray() && payments.size() > 0) {
+                for (com.fasterxml.jackson.databind.JsonNode p : payments) {
+                    String pid = p.has("id") ? p.get("id").asText(null) : null;
+                    if (pid == null) continue;
+                    // Fetch payment details
+                    String pUrl = "https://api.mercadopago.com/v1/payments/" + pid;
+                    try {
+                        ResponseEntity<String> presp = restTemplate.exchange(pUrl, HttpMethod.GET, entity, String.class);
+                        int pStatus = presp.getStatusCodeValue();
+                        String pBody = presp.getBody();
+                        LOGGER.info("{} Response status={} for payment {}", prefixPayment, pStatus, pid);
+                        LOGGER.info("{} Full payment response: {}", prefixPayment, pBody == null ? "null" : pBody);
+
+                        com.fasterxml.jackson.databind.JsonNode payJson = objectMapper.readTree(pBody == null ? "{}" : pBody);
+                        String status = payJson.has("status") ? payJson.get("status").asText(null) : null;
+                        String statusDetail = payJson.has("status_detail") ? payJson.get("status_detail").asText(null) : null;
+                        String transactionAmount = payJson.has("transaction_amount") ? payJson.get("transaction_amount").asText(null) : null;
+                        String paymentMethodId = payJson.has("payment_method_id") ? payJson.get("payment_method_id").asText(null) : null;
+                        String dateCreated = payJson.has("date_created") ? payJson.get("date_created").asText(null) : null;
+                        String dateApproved = payJson.has("date_approved") ? payJson.get("date_approved").asText(null) : null;
+                        String payerEmail = null;
+                        if (payJson.has("payer") && payJson.get("payer").has("email")) payerEmail = payJson.get("payer").get("email").asText(null);
+                        String metadata = payJson.has("metadata") ? payJson.get("metadata").toString() : null;
+                        String prefExternalRef = payJson.has("external_reference") ? payJson.get("external_reference").asText(null) : null;
+
+                        LOGGER.info("{} payment.id={} status={} status_detail={} transaction_amount={} payment_method_id={} date_created={} date_approved={} payer.email={} metadata={} external_reference={}",
+                                prefixPayment, pid, status, statusDetail, transactionAmount, paymentMethodId, dateCreated, dateApproved, payerEmail, metadata, prefExternalRef);
+
+                        if ("approved".equalsIgnoreCase(status)) {
+                            LOGGER.info("{} PAYMENT APPROVED for order {}", prefixPayment, externalRef);
+                        } else if ("rejected".equalsIgnoreCase(status)) {
+                            LOGGER.info("{} PAYMENT REJECTED", prefixPayment);
+                            LOGGER.info("{} REJECTION DETAIL: {}", prefixPayment, statusDetail);
+                        }
+
+                        // Optionally mark residencia if preference available
+                        String prefId = null;
+                        if (payJson.has("preference_id")) prefId = payJson.get("preference_id").asText(null);
+                        if (prefId == null && payJson.has("order") && payJson.get("order").has("preference_id")) {
+                            prefId = payJson.get("order").get("preference_id").asText(null);
+                        }
+                        if (prefId != null && externalRef != null) {
+                            try {
+                                Long residenciaId = null;
+                                try { residenciaId = Long.valueOf(externalRef); } catch (Exception ignored) {}
+                                if (residenciaId != null) {
+                                    boolean marked = verifyPreferenceAndMarkResidencia(prefId, residenciaId);
+                                    LOGGER.info("{} Marked residencia {} for preference {}: {}", prefixPayment, residenciaId, prefId, marked);
+                                }
+                            } catch (Exception ex) {
+                                LOGGER.warn("{} Error marking residencia for preference {}: {}", prefixPayment, prefId, ex.getMessage());
+                            }
+                        }
+
+                    } catch (org.springframework.web.client.HttpStatusCodeException hex) {
+                        LOGGER.error("{} HTTP error fetching payment {}: status={} body={} message={}", prefixPayment, pid, hex.getStatusCode(), hex.getResponseBodyAsString(), hex.getMessage());
+                    } catch (Exception ex) {
+                        LOGGER.error("{} Unexpected error fetching payment {}: {}", prefixPayment, pid, ex.getMessage());
+                    }
+                }
+            }
+
+        } catch (org.springframework.web.client.HttpStatusCodeException hex) {
+            LOGGER.error("{} HTTP error fetching merchant_order {}: status={} body={} message={}", prefixMO, merchantOrderId, hex.getStatusCode(), hex.getResponseBodyAsString(), hex.getMessage());
+        } catch (Exception ex) {
+            LOGGER.error("{} Unexpected error processing merchant_order {}: {}", prefixMO, merchantOrderId, ex.getMessage());
+        }
+    }
+
+    @Override
     public boolean verifyPreferenceAndMarkResidencia(String preferenceId, Long residenciaId) {
         try {
             if (preferenciaPagada(preferenceId)) {
